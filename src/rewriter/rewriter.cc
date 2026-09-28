@@ -40,6 +40,7 @@
 #include "dictionary/single_kanji_dictionary.h"
 #include "engine/modules.h"
 #include "rewriter/a11y_description_rewriter.h"
+#include "rewriter/azookey_variants_rewriter.h"
 #include "rewriter/calculator_rewriter.h"
 #include "rewriter/collocation_rewriter.h"
 #include "rewriter/correction_rewriter.h"
@@ -165,6 +166,7 @@ Rewriter::Rewriter(const engine::Modules& modules) {
   AddRewriter(std::make_unique<ZipcodeRewriter>(pos_matcher));
   AddRewriter(std::make_unique<DiceRewriter>());
   AddRewriter(std::make_unique<SmallLetterRewriter>());
+  AddRewriter(std::make_unique<AzookeyVariantsRewriter>());
 
   if (absl::GetFlag(FLAGS_use_history_rewriter)) {
     AddRewriter(std::make_unique<UserBoundaryHistoryRewriter>());

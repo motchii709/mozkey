@@ -107,6 +107,9 @@ void ApplyMozkeyProductDefaults(Config* config) {
   if (!config->has_use_realtime_conversion()) {
     config->set_use_realtime_conversion(false);
   }
+  if (!config->has_use_azookey_variants_conversion()) {
+    config->set_use_azookey_variants_conversion(true);
+  }
 
 #ifdef _WIN32
   // Pending-Roman presentation is a Windows TSF feature. Keep it disabled

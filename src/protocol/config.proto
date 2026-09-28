@@ -449,6 +449,15 @@ message Config {
   // See: http://unicode.org/reports/tr51/#Presentation_Style
   optional bool use_emoji_conversion = 89 [default = false];
 
+  // If use_azookey_variants_conversion is true, the user can input extra glyph
+  // variants of the bare input key as additional conversion candidates,
+  // following azooKey's "拡張変換" feature: an all-digit key yields
+  // superscript ("123" -> "¹²³"), subscript ("123" -> "₁₂₃") and full-width
+  // ("123" -> "１２３") candidates, and an all-kana key yields a half-width
+  // katakana candidate ("が" -> "ｶﾞ"). The extra candidates are appended at
+  // the end of the candidate list and never disturb existing candidates.
+  optional bool use_azookey_variants_conversion = 91 [default = true];
+
   message InformationListConfig {
     optional bool use_local_usage_dictionary = 1 [default = true];
     reserved 2;
