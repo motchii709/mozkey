@@ -1605,6 +1605,7 @@ mozc_cc_library(
         ":environmental_filter_rewriter",
         ":focus_candidate_rewriter",
         ":fortune_rewriter",
+        ":azookey_variants_rewriter",
         ":ivs_variants_rewriter",
         ":language_aware_rewriter",
         ":merger_rewriter",
