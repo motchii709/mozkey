@@ -83,7 +83,7 @@ bool ContainCandidate(const Segments& segments,
 
 ConversionRequest MakeRequest(absl::string_view key,
                               const config::Config& config) {
-  return ConversionRequestBuilder().SetKey(key).SetConfig(config).Build();
+  return ConversionRequestBuilder().SetConfig(config).SetKey(key).Build();
 }
 
 config::Config MakeConfig(bool enabled) {
