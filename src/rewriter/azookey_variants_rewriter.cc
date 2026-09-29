@@ -158,11 +158,35 @@ std::optional<std::string> ConvertToHalfWidthKana(absl::string_view key) {
   return value;
 }
 
-// Appends `value` as an extra candidate at the end of `segment`. Existing
-// candidates are left untouched.
-void AddCandidate(const absl::string_view key, const absl::string_view description,
+// Returns true if `segment` already offers a candidate (regular or meta) whose
+// value equals `value`. mozc's transliteration (t13n) rewriter already emits
+// half-width katakana for kana keys and full-width digits for digit keys, so
+// this guard keeps those from being duplicated: the resulting candidate list
+// stays identical to what t13n alone would produce.
+bool HasCandidate(const Segment& segment, const absl::string_view value) {
+  for (const converter::Candidate* candidate : segment.candidates()) {
+    if (candidate->value == value) {
+      return true;
+    }
+  }
+  for (const converter::Candidate& meta : segment.meta_candidates()) {
+    if (meta.value == value) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Appends `value` as an extra candidate at the end of `segment` unless a
+// candidate with the same value already exists. Returns true when a candidate
+// was actually added. Existing candidates are left untouched.
+bool AddCandidate(const absl::string_view key, const absl::string_view description,
                   std::string value, Segment* segment) {
   DCHECK(segment);
+
+  if (HasCandidate(*segment, value)) {
+    return false;
+  }
 
   converter::Candidate* candidate =
       segment->insert_candidate(segment->candidates_size());
@@ -176,6 +200,7 @@ void AddCandidate(const absl::string_view key, const absl::string_view descripti
   candidate->description = std::string(description);
   candidate->attributes |= (converter::Attribute::NO_LEARNING |
                             converter::Attribute::NO_VARIANTS_EXPANSION);
+  return true;
 }
 }  // namespace
 
@@ -212,19 +237,20 @@ bool AzookeyVariantsRewriter::Rewrite(const ConversionRequest& request,
   Segment* segment = segments->mutable_conversion_segment(0);
 
   if (IsAllDigits(key)) {
-    AddCandidate(key, kDescription, ConvertDigits(key, kSuperscriptDigits),
-                 segment);
-    AddCandidate(key, kDescription, ConvertDigits(key, kSubscriptDigits),
-                 segment);
-    AddCandidate(key, kDescription, ConvertDigits(key, kFullWidthDigits),
-                 segment);
-    return true;
+    bool added = false;
+    added |= AddCandidate(key, kDescription, ConvertDigits(key, kSuperscriptDigits),
+                          segment);
+    added |= AddCandidate(key, kDescription, ConvertDigits(key, kSubscriptDigits),
+                          segment);
+    added |= AddCandidate(key, kDescription, ConvertDigits(key, kFullWidthDigits),
+                          segment);
+    return added;
   }
 
   if (std::optional<std::string> half_width_kana =
           ConvertToHalfWidthKana(key)) {
-    AddCandidate(key, kDescription, std::move(*half_width_kana), segment);
-    return true;
+    return AddCandidate(key, kDescription, std::move(*half_width_kana),
+                        segment);
   }
 
   return false;
