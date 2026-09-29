@@ -1592,8 +1592,8 @@ mozc_cc_library(
         "//engine:__pkg__",
     ],
     deps = [
-        ":azookey_variants_rewriter",
         ":a11y_description_rewriter",
+        ":azookey_variants_rewriter",
         ":calculator_rewriter",
         ":collocation_rewriter",
         ":command_rewriter",
