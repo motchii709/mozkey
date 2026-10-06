@@ -100,6 +100,9 @@ struct Options {
 
   std::wstring llama_server_path;
   std::wstring model_path;
+  // Optional speculative decoding draft model. Empty when the file is absent;
+  // LaunchLlamaServer then starts llama-server without --model-draft.
+  std::wstring draft_model_path;
 };
 
 void Debug(const std::wstring& message) {
@@ -295,6 +298,16 @@ Options LoadOptions() {
   if (options.model_path.empty()) {
     options.model_path =
         JoinPath(JoinPath(exe_dir, L"models"), L"zenz-v3.2-small-Q5_K_M.gguf");
+  }
+
+  // Speculative decoding draft model. Optional: when the packaged file is
+  // missing the launch arguments stay exactly as before (see
+  // WINDOWS_ZENZ_RUNTIME_CONTRACT.md).
+  options.draft_model_path =
+      JoinPath(JoinPath(exe_dir, L"models"),
+               L"zenz-v3.2-xsmall-Q5_K_M.gguf");
+  if (!FileExists(options.draft_model_path)) {
+    options.draft_model_path.clear();
   }
 
   options.api_key = GenerateApiKey();
@@ -1082,6 +1095,17 @@ bool LaunchLlamaServer(const Options& options,
   // --api-key.  Do not treat it as a strong same-user secret.
   cmd += L" --api-key ";
   cmd += Utf8ToWide(options.api_key);
+
+  // Speculative decoding: draft tokens are verified against the target model,
+  // so greedy output is unchanged. Only enabled when the draft model ships with
+  // the package (file presence check in LoadOptions); llama-server would fail
+  // to start on a missing path.
+  if (!options.draft_model_path.empty()) {
+    cmd += L" --model-draft \"";
+    cmd += options.draft_model_path;
+    cmd += L"\"";
+    cmd += L" --draft-max 8";
+  }
 
   Debug(L"launch llama-server port=" + std::to_wstring(port) +
         L" api_key_bytes=" + std::to_wstring(options.api_key.size()));

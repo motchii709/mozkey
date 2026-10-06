@@ -14,6 +14,18 @@ This product includes third-party software and model files.
 - Source commit observed for the model upload: c67e03e
 - Notes: Distributed without modification except for file placement, file naming, and packaging into the MSI installer.
 
+## Zenz v3.2 xsmall GGUF (speculative decoding draft model)
+
+- Repository: Miwa-Keita/zenz-v3.2-xsmall-gguf
+- Source: Hugging Face
+- Original model file: ggml-model-Q5_K_M.gguf
+- Included file: models/zenz-v3.2-xsmall-Q5_K_M.gguf
+- SHA256: 00C64B3D318045A708D0CAD5434FACCAB10F5481A49E6362864551FD0995FA58
+- License: Apache License 2.0
+- Source repository URL: https://huggingface.co/Miwa-Keita/zenz-v3.2-xsmall-gguf
+- Source file URL: https://huggingface.co/Miwa-Keita/zenz-v3.2-xsmall-gguf/blob/main/ggml-model-Q5_K_M.gguf
+- Notes: Distributed without modification except for file placement, file naming, and packaging into the MSI installer. Used as the llama-server speculative decoding draft model; shares the GPT-2 architecture and 6000-token GPT-2 BPE tokenizer with the Zenz v3.2 small target model, so draft tokens are verified losslessly.
+
 ## llama.cpp / ggml runtime
 
 - Project: ggml-org/llama.cpp

@@ -1,0 +1,28 @@
+Miwa-Keita/zenz-v3.2-xsmall-gguf
+
+Source:
+  Hugging Face model repository: Miwa-Keita/zenz-v3.2-xsmall-gguf
+  https://huggingface.co/Miwa-Keita/zenz-v3.2-xsmall-gguf
+
+Original model file:
+  ggml-model-Q5_K_M.gguf
+
+Included as:
+  models/zenz-v3.2-xsmall-Q5_K_M.gguf
+
+License:
+  Apache License 2.0
+
+SHA256:
+  00C64B3D318045A708D0CAD5434FACCAB10F5481A49E6362864551FD0995FA58
+
+Notes:
+  Distributed without modification except for file placement, file naming, and packaging into the MSI installer.
+
+  This model is the speculative decoding draft model for models/zenz-v3.2-small-Q5_K_M.gguf.
+  It shares the same model architecture (GPT-2) and tokenizer (6000 vocabulary
+  tokens, GPT-2 BPE) as the target model, so llama-server can verify its
+  proposed tokens losslessly against the target model.
+
+Required license file:
+  Apache-2.0.txt

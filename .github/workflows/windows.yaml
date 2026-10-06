@@ -697,6 +697,7 @@ jobs:
         env:
           EXPECTED_LLAMA_SHA256: 0ACD17D6EE5E361AFC06A7DCCD06EF012A00669546535889B874D5C3BB3DE81B
           EXPECTED_MODEL_SHA256: 29C223D4C23327B80FD13EBB5AB2555057A46317997D5DA391584FFBEF0DB673
+          EXPECTED_DRAFT_MODEL_SHA256: 00C64B3D318045A708D0CAD5434FACCAB10F5481A49E6362864551FD0995FA58
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = "Stop"
@@ -1111,8 +1112,9 @@ jobs:
             $llama = Join-Path $installDir "llama-server.exe"
             $scorer = Join-Path $installDir "mozc_zenz_scorer.exe"
             $model = Join-Path $installDir "models\zenz-v3.2-small-Q5_K_M.gguf"
+            $draftModel = Join-Path $installDir "models\zenz-v3.2-xsmall-Q5_K_M.gguf"
 
-            foreach ($path in @($llama, $scorer, $model)) {
+            foreach ($path in @($llama, $scorer, $model, $draftModel)) {
               if (-not (Test-Path $path -PathType Leaf)) {
                 throw "Required installed Zenz file missing: $path"
               }
@@ -1120,6 +1122,7 @@ jobs:
 
             $llamaSha = (Get-FileHash $llama -Algorithm SHA256).Hash
             $modelSha = (Get-FileHash $model -Algorithm SHA256).Hash
+            $draftModelSha = (Get-FileHash $draftModel -Algorithm SHA256).Hash
             $scorerSha = (Get-FileHash $scorer -Algorithm SHA256).Hash
             $llamaArch = Get-PEMachine $llama
             $scorerArch = Get-PEMachine $scorer
@@ -1132,6 +1135,7 @@ jobs:
             Write-Host "scorer PE            = $scorerArch"
             Write-Host "scorer SHA256        = $scorerSha"
             Write-Host "model SHA256         = $modelSha"
+            Write-Host "draft model SHA256   = $draftModelSha"
 
             if ($llamaArch -ne "ARM64") {
               throw "Installed llama-server is not native ARM64."
@@ -1144,6 +1148,9 @@ jobs:
             }
             if ($modelSha -ne $env:EXPECTED_MODEL_SHA256) {
               throw "Installed model hash does not match W1/W3 contract."
+            }
+            if ($draftModelSha -ne $env:EXPECTED_DRAFT_MODEL_SHA256) {
+              throw "Installed draft model hash does not match contract."
             }
 
             foreach ($legacy in @(
@@ -1496,14 +1503,18 @@ jobs:
             $loopbackHost = $cmdLine.Contains("--host 127.0.0.1")
             $installedModelArg = $cmdLine.Contains($model)
             $hasApiKey = $cmdLine.Contains("--api-key")
+            $draftModelArg = $cmdLine.Contains("--model-draft") -and
+              $cmdLine.Contains($draftModel)
 
             Write-Host "scorer llama --parallel 1     = $parallelOne"
             Write-Host "scorer llama loopback host    = $loopbackHost"
             Write-Host "scorer llama installed model  = $installedModelArg"
             Write-Host "scorer llama API key argument = $hasApiKey"
+            Write-Host "scorer llama --model-draft    = $draftModelArg"
 
             if (-not $parallelOne -or -not $loopbackHost -or
-                -not $installedModelArg -or -not $hasApiKey) {
+                -not $installedModelArg -or -not $hasApiKey -or
+                -not $draftModelArg) {
               throw "Installed scorer launched llama-server with an unexpected command contract."
             }
 
@@ -1638,7 +1649,8 @@ jobs:
                 foreach ($zenzPath in @(
                   (Join-Path $installDir "llama-server.exe"),
                   (Join-Path $installDir "mozc_zenz_scorer.exe"),
-                  (Join-Path $installDir "models\zenz-v3.2-small-Q5_K_M.gguf")
+                  (Join-Path $installDir "models\zenz-v3.2-small-Q5_K_M.gguf"),
+                  (Join-Path $installDir "models\zenz-v3.2-xsmall-Q5_K_M.gguf")
                 )) {
                   if (Test-Path $zenzPath) {
                     Write-Error "Installed Zenz payload remains after uninstall: $zenzPath"
