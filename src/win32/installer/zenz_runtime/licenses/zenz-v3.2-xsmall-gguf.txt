@@ -21,8 +21,9 @@ Notes:
 
   This model is the speculative decoding draft model for models/zenz-v3.2-small-Q5_K_M.gguf.
   It shares the same model architecture (GPT-2) and tokenizer (6000 vocabulary
-  tokens, GPT-2 BPE) as the target model, so llama-server can verify its
-  proposed tokens losslessly against the target model.
+  tokens, GPT-2 BPE, tokenizer.ggml.pre=gpt2-small-japanese-char) as the target
+  model, so llama-server can verify its proposed tokens losslessly against the
+  target model.
 
 Required license file:
   Apache-2.0.txt

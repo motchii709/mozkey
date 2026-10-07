@@ -1104,7 +1104,9 @@ bool LaunchLlamaServer(const Options& options,
     cmd += L" --model-draft \"";
     cmd += options.draft_model_path;
     cmd += L"\"";
-    cmd += L" --draft-max 8";
+    // llama.cpp renamed --draft-max to --spec-draft-n-max (b16d222f rejects
+    // the old spelling with a hard error).
+    cmd += L" --spec-draft-n-max 8";
   }
 
   Debug(L"launch llama-server port=" + std::to_wstring(port) +

@@ -1504,7 +1504,8 @@ jobs:
             $installedModelArg = $cmdLine.Contains($model)
             $hasApiKey = $cmdLine.Contains("--api-key")
             $draftModelArg = $cmdLine.Contains("--model-draft") -and
-              $cmdLine.Contains($draftModel)
+              $cmdLine.Contains($draftModel) -and
+              $cmdLine.Contains("--spec-draft-n-max 8")
 
             Write-Host "scorer llama --parallel 1     = $parallelOne"
             Write-Host "scorer llama loopback host    = $loopbackHost"

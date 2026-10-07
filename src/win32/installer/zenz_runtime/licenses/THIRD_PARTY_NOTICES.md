@@ -24,7 +24,7 @@ This product includes third-party software and model files.
 - License: Apache License 2.0
 - Source repository URL: https://huggingface.co/Miwa-Keita/zenz-v3.2-xsmall-gguf
 - Source file URL: https://huggingface.co/Miwa-Keita/zenz-v3.2-xsmall-gguf/blob/main/ggml-model-Q5_K_M.gguf
-- Notes: Distributed without modification except for file placement, file naming, and packaging into the MSI installer. Used as the llama-server speculative decoding draft model; shares the GPT-2 architecture and 6000-token GPT-2 BPE tokenizer with the Zenz v3.2 small target model, so draft tokens are verified losslessly.
+- Notes: Distributed without modification except for file placement, file naming, and packaging into the MSI installer. Used as the llama-server speculative decoding draft model; shares the GPT-2 architecture and 6000-token GPT-2 BPE tokenizer (tokenizer.ggml.pre=gpt2-small-japanese-char) with the Zenz v3.2 small target model, so draft tokens are verified losslessly.
 
 ## llama.cpp / ggml runtime
 

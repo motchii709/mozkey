@@ -21,8 +21,9 @@
 - the scorer enables speculative decoding when this file is present next to the
   target model by appending `--model-draft` to the llama-server launch
   arguments; absent file means the previous no-draft behavior unchanged
-- both models share the GPT-2 architecture and 6000-token GPT-2 BPE tokenizer;
-  llama-server rejects tokenizer mismatches at startup
+- both models share the GPT-2 architecture and 6000-token GPT-2 BPE tokenizer
+  (`tokenizer.ggml.pre=gpt2-small-japanese-char` in both GGUFs); llama-server
+  rejects tokenizer mismatches at startup
 
 ## Runtime assets
 
@@ -64,8 +65,10 @@
 - `LLAMA_OPENSSL=OFF`
 - scorer launches `llama-server` with `--parallel 1`
 - when `models/zenz-v3.2-xsmall-Q5_K_M.gguf` is present, the scorer additionally
-  launches with `--model-draft <that path> --draft-max 8` for speculative
+  launches with `--model-draft <that path> --spec-draft-n-max 8` for speculative
   decoding; when absent the launch arguments are unchanged from before
+  (this pinned llama.cpp build rejects the legacy `--draft-max` spelling with a
+  hard error, so the `--spec-draft-n-max` name must be used)
 - server binds to `127.0.0.1`
 - scorer supplies a generated API key
 - the Windows installer installs enabled outbound/block firewall rules for `mozc_zenz_scorer.exe` and `llama-server.exe`, in addition to the existing Mozc runtime rules
