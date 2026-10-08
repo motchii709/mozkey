@@ -146,6 +146,27 @@ TEST(ZenzPromptBuilderCharacterizationTest,
       builder.Build("reading", options));
 }
 
+TEST(ZenzPromptBuilderCharacterizationTest,
+     ReadingPreservesAsciiSpellingVerbatim) {
+  // Mixed English/Japanese input: ASCII inside the reading must survive
+  // Build() byte-identically so the model sees the exact casing
+  // (e.g. "GitHub").  Hiragana still converts to katakana; ASCII does not.
+  const ZenzPromptBuilder builder;
+
+  EXPECT_EQ(std::string(kZenzContextBegin) + kZenzReadingBegin +
+                "githubニpushシテホシイ" + kZenzOutputBegin,
+            builder.Build("githubニpushしてほしい"));
+
+  EXPECT_EQ(std::string(kZenzContextBegin) + kZenzReadingBegin +
+                "GitHubニPushシテホシイ" + kZenzOutputBegin,
+            builder.Build("GitHubニPushしてほしい"));
+
+  // Kana-only reading still converts hiragana to katakana as before.
+  EXPECT_EQ(std::string(kZenzContextBegin) + kZenzReadingBegin + "シタイ" +
+                kZenzOutputBegin,
+            builder.Build("したい"));
+}
+
 }  // namespace
 }  // namespace session
 }  // namespace mozc

@@ -1127,10 +1127,20 @@
                   </layout>
                  </widget>
                 </item>
-                <item row="8" column="0" colspan="8">
+                <item row="8" column="0" colspan="4">
                  <widget class="QCheckBox" name="autoSwitchCompositionMode">
                   <property name="text">
                    <string>Automatically switch to halfwidth</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="8" column="4" colspan="4">
+                 <widget class="QCheckBox" name="useAutoLanguageSwitchCheckBox">
+                  <property name="toolTip">
+                   <string>入力中の英字の連続を英語として保持し、カタカナ変換を避けます（GitHub/Push などの綴りを保全）。</string>
+                  </property>
+                  <property name="text">
+                   <string>英字/かな自動判別</string>
                   </property>
                  </widget>
                 </item>
@@ -3493,6 +3503,7 @@
   <tabstop>useDarkModeCandidateWindow</tabstop>
   <tabstop>candidateRubyFontComboBox</tabstop>
   <tabstop>autoSwitchCompositionMode</tabstop>
+  <tabstop>useAutoLanguageSwitchCheckBox</tabstop>
   <tabstop>showCandidateWindowOnInitialConversionCheckBox</tabstop>
   <tabstop>liveConversionCheckBox</tabstop>
   <tabstop>liveConversionDelaySpinBox</tabstop>

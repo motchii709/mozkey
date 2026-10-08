@@ -458,6 +458,9 @@ message Config {
   // the end of the candidate list and never disturb existing candidates.
   optional bool use_azookey_variants_conversion = 91 [default = true];
 
+  // Keep a bare English word (e.g. "github") as-is instead of kana conversion.
+  optional bool use_auto_language_switch = 92 [default = true];
+
   message InformationListConfig {
     optional bool use_local_usage_dictionary = 1 [default = true];
     reserved 2;

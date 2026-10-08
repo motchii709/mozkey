@@ -73,6 +73,11 @@ void SetLegacyInputDefaultsForScenarioTest() {
   config.set_use_zenz_feedback_learning(false);
   config.set_use_realtime_conversion(true);
 
+  // Scenario files are golden tests for traditional Mozc behavior. Keep the
+  // new English/Japanese auto detection off so Latin keys (e.g. "moZc" in
+  // transliterations_f10.txt) behave exactly as before.
+  config.set_use_auto_language_switch(false);
+
   config::ConfigHandler::SetConfig(config);
 }
 
