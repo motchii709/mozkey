@@ -62,12 +62,25 @@ class ModeSwitchingHandler {
   // Returns a Rule for the current preedit. |key| is the string which the user
   // actually typed. display_mode and input_mode are stored rules controlling
   // the composer. Returns NO_CHANGE if the key doesn't match the stored rules.
-  static Rule GetModeSwitchingRule(absl::string_view key);
+  //
+  // When |enable_latin_word_rule| is true, a pure Latin word that is not
+  // covered by the keyword rules above (e.g. "GitHub", "Push") is kept as
+  // alphanumeric and the input mode reverts to the previous mode, so mixed
+  // English/Japanese typing does not get romanized into kana.  The flag
+  // defaults to false to preserve the historical behavior; callers gate it
+  // on config::Config::use_auto_language_switch.
+  static Rule GetModeSwitchingRule(absl::string_view key,
+                                   bool enable_latin_word_rule = false);
 
   // Matcher to Windows drive letters like "C:\".
   // TODO(team): This static method is internal use only.  It's public for
   // testing purpose.
   static bool IsDriveLetter(absl::string_view key);
+
+  // Returns true when |key| consists only of ASCII letters and is at least
+  // two characters long (e.g. "GitHub").  Punctuation, digits, kana, and
+  // single letters all return false.
+  static bool IsLatinWord(absl::string_view key);
 };
 
 }  // namespace composer

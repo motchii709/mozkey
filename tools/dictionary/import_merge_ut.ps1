@@ -1,4 +1,4 @@
-﻿param(
+param(
     [ValidateSet("sample", "safe", "daily", "rich", "max")]
     [string]$Profile = "sample",
     [int]$SampleLines = 5000,
@@ -240,6 +240,67 @@ foreach ($Key in $Flags.Keys) {
 
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($MakePath, $Content, $Utf8NoBom)
+
+# ---------------------------------------------------------------------------
+# merge-ut-dictionaries resolves Mozc's dictionary entries through the GitHub
+# REST API with an unauthenticated urllib call.  Shared GitHub Actions runner
+# IPs exhaust the 60 requests/hour anonymous quota easily, which aborts the
+# whole daily-dictionary build with "HTTP Error 403: rate limit exceeded".
+# When the workflow provides a token (MOZKEY_DICT_GITHUB_TOKEN), install a
+# small preamble in the freshly cloned merge script that attaches it to
+# api.github.com requests.  Without a token the preamble stays inert, so local
+# runs keep exactly the previous behaviour.
+$MergeScript = Join-Path $MergeRepo "src\merge\merge_dictionaries.py"
+$MergeMarker = "# mozkey: authenticated GitHub API preamble"
+try {
+    if ((Test-Path $MergeScript) -and
+        ((Get-Content -Raw -Encoding UTF8 $MergeScript) -notlike "*$MergeMarker*")) {
+        $Preamble = @'
+# mozkey: authenticated GitHub API preamble
+import os as _mozkey_os
+import urllib.request as _mozkey_urllib
+
+_mozkey_token = (
+    _mozkey_os.environ.get("MOZKEY_DICT_GITHUB_TOKEN")
+    or _mozkey_os.environ.get("GITHUB_TOKEN")
+    or _mozkey_os.environ.get("GH_TOKEN")
+)
+if _mozkey_token and not getattr(_mozkey_urllib, "_mozkey_patched", False):
+    _mozkey_urlopen_original = _mozkey_urllib.urlopen
+
+    def _mozkey_urlopen(_mozkey_request, *args, **kwargs):
+        if isinstance(_mozkey_request, str):
+            _mozkey_request = _mozkey_urllib.Request(_mozkey_request)
+        if "api.github.com" in getattr(_mozkey_request, "full_url", ""):
+            _mozkey_request.add_header(
+                "Authorization", "Bearer " + _mozkey_token
+            )
+        return _mozkey_urlopen_original(_mozkey_request, *args, **kwargs)
+
+    _mozkey_urllib.urlopen = _mozkey_urlopen
+    _mozkey_urllib._mozkey_patched = True
+# mozkey: end preamble
+
+'@
+        $MergeSource = Get-Content -Raw -Encoding UTF8 $MergeScript
+        if ($MergeSource.StartsWith("#!")) {
+            $Break = $MergeSource.IndexOf("`n")
+            $MergeSource = $MergeSource.Substring(0, $Break + 1) + $Preamble +
+                $MergeSource.Substring($Break + 1)
+        } else {
+            $MergeSource = $Preamble + $MergeSource
+        }
+        [System.IO.File]::WriteAllText($MergeScript, $MergeSource, $Utf8NoBom)
+
+        if ($env:MOZKEY_DICT_GITHUB_TOKEN -or $env:GITHUB_TOKEN -or $env:GH_TOKEN) {
+            Write-Host "Installed authenticated GitHub API preamble in merge_dictionaries.py"
+        } else {
+            Write-Host "Installed inert GitHub API preamble (no token present)"
+        }
+    }
+} catch {
+    Write-Warning "Could not install the GitHub API preamble: $_"
+}
 
 $MergeDir = Join-Path $MergeRepo "src\merge"
 

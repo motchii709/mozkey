@@ -89,6 +89,7 @@ void SetMozkeyProductDefaultsForTesting(Config* config) {
   config->set_use_zenz_live_correction_right_context(true);
   config->set_use_realtime_conversion(false);
   config->set_use_azookey_variants_conversion(true);
+  config->set_use_auto_language_switch(false);
 #ifdef _WIN32
   config->set_dim_pending_roman_input(false);
   config->set_pending_roman_dimness_percent(75);
@@ -128,6 +129,7 @@ void ExpectMozkeyProductDefaults(const Config& config) {
   EXPECT_TRUE(config.use_dictionary_suggest());
   EXPECT_FALSE(config.use_realtime_conversion());
   EXPECT_TRUE(config.use_azookey_variants_conversion());
+  EXPECT_FALSE(config.use_auto_language_switch());
 #ifdef _WIN32
   EXPECT_FALSE(config.dim_pending_roman_input());
   EXPECT_EQ(config.pending_roman_dimness_percent(), 75);
@@ -217,6 +219,7 @@ TEST_F(ConfigHandlerTest, MozkeyProductDefaultsPreserveExplicitSettings) {
   input.set_use_zenz_live_correction_right_context(false);
   input.set_use_realtime_conversion(true);
   input.set_use_azookey_variants_conversion(false);
+  input.set_use_auto_language_switch(true);
 #ifdef _WIN32
   // Use values opposite to the product defaults so this test proves that
   // presence, not value equality, protects explicit user choices.
@@ -241,6 +244,7 @@ TEST_F(ConfigHandlerTest, MozkeyProductDefaultsPreserveExplicitSettings) {
   EXPECT_FALSE(output.use_zenz_live_correction_right_context());
   EXPECT_TRUE(output.use_realtime_conversion());
   EXPECT_FALSE(output.use_azookey_variants_conversion());
+  EXPECT_TRUE(output.use_auto_language_switch());
 #ifdef _WIN32
   EXPECT_TRUE(output.dim_pending_roman_input());
   EXPECT_EQ(output.pending_roman_dimness_percent(), 40);
