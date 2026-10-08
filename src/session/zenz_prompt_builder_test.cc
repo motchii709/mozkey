@@ -152,19 +152,20 @@ TEST(ZenzPromptBuilderCharacterizationTest,
   // Build() byte-identically so the model sees the exact casing
   // (e.g. "GitHub").  Hiragana still converts to katakana; ASCII does not.
   const ZenzPromptBuilder builder;
+  const ZenzPromptOptions no_conditions;
 
   EXPECT_EQ(std::string(kZenzContextBegin) + kZenzReadingBegin +
                 "githubニpushシテホシイ" + kZenzOutputBegin,
-            builder.Build("githubニpushしてほしい"));
+            builder.Build("githubニpushしてほしい", no_conditions));
 
   EXPECT_EQ(std::string(kZenzContextBegin) + kZenzReadingBegin +
                 "GitHubニPushシテホシイ" + kZenzOutputBegin,
-            builder.Build("GitHubニPushしてほしい"));
+            builder.Build("GitHubニPushしてほしい", no_conditions));
 
   // Kana-only reading still converts hiragana to katakana as before.
   EXPECT_EQ(std::string(kZenzContextBegin) + kZenzReadingBegin + "シタイ" +
                 kZenzOutputBegin,
-            builder.Build("したい"));
+            builder.Build("したい", no_conditions));
 }
 
 }  // namespace
