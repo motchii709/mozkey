@@ -48,10 +48,26 @@ struct ZenzOrthographyDecision {
 // material (for example C++, GPT-5, UTF-8, HTTP/2, and Windows11) are also
 // preserved exactly.  Numeric-only spans are deliberately outside this policy.
 // Zenz alone may neither introduce, remove, nor mutate the protected surfaces.
+//
+// One additive, opt-in exception exists for mixed English/Japanese input.
+// `allow_script_transition` mirrors config::Config::use_auto_language_switch
+// (the user-visible "Auto" switch, default false).  When it is true, a Mozc
+// surface that contains no ASCII letter at all (pure kana) may become ASCII
+// letters, but only when every ASCII surface the candidate introduces was
+// literally typed by the user as raw romaji, supplied in `typed_raw_input`
+// (composer::Composer::GetRawString()).  Matching is a case-insensitive
+// contiguous substring test, so "github" typed as raw romaji licenses the
+// candidate run "GitHub", while invented or transliteration-only spellings such
+// as "Tokyo" typed as "toukyou" stay rejected.  Removal, mutation, and
+// duplication of existing ASCII surfaces remain rejected, `typed_raw_input` is
+// never enough on its own, and an empty `typed_raw_input` fails closed.
+// With the flag false the method behaves exactly as before.
 class ZenzOrthographyPolicy {
  public:
-  ZenzOrthographyDecision Evaluate(absl::string_view mozc_value,
-                                   absl::string_view candidate_value) const;
+  ZenzOrthographyDecision Evaluate(
+      absl::string_view mozc_value, absl::string_view candidate_value,
+      bool allow_script_transition = false,
+      absl::string_view typed_raw_input = "") const;
 };
 
 }  // namespace mozc::session

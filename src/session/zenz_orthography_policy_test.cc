@@ -92,5 +92,70 @@ TEST(ZenzOrthographyPolicyTest, AllowsJapaneseOnlyRewrite) {
   EXPECT_TRUE(policy.Evaluate("彼は点滴です", "彼は天敵です").allow);
 }
 
+TEST(ZenzOrthographyPolicyTest,
+     AcceptsTypedAlphabeticSurfaceWhenScriptTransitionEnabled) {
+  ZenzOrthographyPolicy policy;
+
+  EXPECT_TRUE(policy
+                  .Evaluate("ぎっとはぶにぷっしゅ", "GitHubにPush",
+                            /*allow_script_transition=*/true, "githubnipush")
+                  .allow);
+  // The permission never stands alone: without the typed raw romaji the same
+  // transition is still rejected.
+  EXPECT_FALSE(policy
+                   .Evaluate("ぎっとはぶにぷっしゅ", "GitHubにPush",
+                             /*allow_script_transition=*/true, "")
+                   .allow);
+}
+
+TEST(ZenzOrthographyPolicyTest,
+     RejectsUngroundedAlphabeticSurfaceWhenScriptTransitionEnabled) {
+  ZenzOrthographyPolicy policy;
+
+  const ZenzOrthographyDecision decision =
+      policy.Evaluate("とうきょう", "Zqxw",
+                      /*allow_script_transition=*/true, "toukyou");
+  EXPECT_FALSE(decision.allow);
+  EXPECT_EQ(decision.reason, "alphabetic_surface_changed");
+
+  // A transliteration of the kana reading is not something the user typed.
+  EXPECT_FALSE(policy
+                   .Evaluate("とうきょう", "Tokyo",
+                             /*allow_script_transition=*/true, "toukyou")
+                   .allow);
+}
+
+TEST(ZenzOrthographyPolicyTest,
+     KeepsRejectingAlphabeticSurfaceWhenScriptTransitionDisabled) {
+  ZenzOrthographyPolicy policy;
+
+  EXPECT_FALSE(policy
+                   .Evaluate("ぎっとはぶにぷっしゅ", "GitHubにPush",
+                             /*allow_script_transition=*/false, "githubnipush")
+                   .allow);
+  // The defaulted arguments keep the historical two-argument call contract.
+  EXPECT_FALSE(policy.Evaluate("ぎっとはぶにぷっしゅ", "GitHubにPush").allow);
+}
+
+TEST(ZenzOrthographyPolicyTest,
+     DoesNotWeakenLatinSurfaceGuardsWhenScriptTransitionEnabled) {
+  ZenzOrthographyPolicy policy;
+
+  // Removal, mutation, and duplication of Mozc-selected ASCII surfaces stay
+  // rejected even when the typed romaji contains these very letters.
+  EXPECT_FALSE(policy
+                   .Evaluate("GitHubを使う", "ギットハブを使う",
+                             /*allow_script_transition=*/true, "github")
+                   .allow);
+  EXPECT_FALSE(policy
+                   .Evaluate("GitHubを使う", "GitLabを使う",
+                             /*allow_script_transition=*/true, "githubgitlab")
+                   .allow);
+  EXPECT_FALSE(policy
+                   .Evaluate("AIを使う", "AIとAIを使う",
+                             /*allow_script_transition=*/true, "aiaiai")
+                   .allow);
+}
+
 }  // namespace
 }  // namespace mozc::session

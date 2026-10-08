@@ -104,6 +104,21 @@ struct ZenzAdoptionInput {
   absl::string_view zenz_value;
   std::vector<ProtectedConversionSpan> protected_spans;
   std::vector<ZenzBaselineSegment> baseline_segments;
+
+  // Mixed English/Japanese input permission, mirroring
+  // config::Config::use_auto_language_switch (the user-visible "Auto" switch).
+  // When true, a segment whose Mozc surface is pure kana may adopt ASCII
+  // letters that the user literally typed as raw romaji.  The default false
+  // keeps the historical strict orthography behaviour for every existing
+  // caller.
+  bool allow_script_transition = false;
+
+  // Raw romaji typed by the user for this composition
+  // (composer::Composer::GetRawString()).  It is consulted only when
+  // `allow_script_transition` is true, to require that any newly introduced
+  // ASCII letter was actually typed.  It must outlive the Decide() call.  An
+  // empty value fails closed, i.e. no ASCII surface is introduced.
+  absl::string_view typed_raw_input;
 };
 
 struct ZenzAdoptionResult {
