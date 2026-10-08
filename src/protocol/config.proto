@@ -459,7 +459,9 @@ message Config {
   optional bool use_azookey_variants_conversion = 91 [default = true];
 
   // Keep a bare English word (e.g. "github") as-is instead of kana conversion.
-  optional bool use_auto_language_switch = 92 [default = true];
+  // Disabled by default: it changes the meaning of plain Latin keystrokes
+  // inside Japanese input, so it is an explicit opt-in (the "Auto" mode).
+  optional bool use_auto_language_switch = 92 [default = false];
 
   message InformationListConfig {
     optional bool use_local_usage_dictionary = 1 [default = true];

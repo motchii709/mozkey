@@ -111,7 +111,8 @@ void ApplyMozkeyProductDefaults(Config* config) {
     config->set_use_azookey_variants_conversion(true);
   }
   if (!config->has_use_auto_language_switch()) {
-    config->set_use_auto_language_switch(true);
+    // Opt-in: a bare Latin word is kept as-is only when the user asks for it.
+    config->set_use_auto_language_switch(false);
   }
 
 #ifdef _WIN32

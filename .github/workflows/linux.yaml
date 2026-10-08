@@ -112,4 +112,4 @@ jobs:
       - name: bazel test
         working-directory: ./src
         run: |
-          bazelisk test ... -c dbg
+          bazelisk test ... -c dbg --test_output=errors
