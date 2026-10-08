@@ -136,10 +136,53 @@ bool StringMultisetsMatch(const std::vector<std::string>& baseline_values,
   return true;
 }
 
+// ASCII-only case folding.  Non-ASCII bytes are copied verbatim, which is
+// harmless because raw romaji input for a Japanese composition is ASCII, so a
+// non-ASCII surface can never match it.
+std::string ToLowerAscii(absl::string_view value) {
+  std::string lowered;
+  lowered.reserve(value.size());
+  for (const char c : value) {
+    const unsigned char u = static_cast<unsigned char>(c);
+    lowered.push_back((('A' <= u) && (u <= 'Z'))
+                          ? static_cast<char>(u - 'A' + 'a')
+                          : c);
+  }
+  return lowered;
+}
+
+// True when `surface` was literally typed by the user.  `lowered_raw_input` is
+// the case-folded composer raw romaji.  This is the interim, deliberately
+// narrow grounding rule for the mixed-input permission: the candidate surface
+// must appear as a contiguous substring of the raw keystrokes, so an English
+// stretch the user typed as "github" licenses "GitHub", while an invented
+// spelling ("Zqxw") or a transliteration the user never typed ("Tokyo" from
+// "toukyou") is still rejected.  Tightening this to a per-segment raw substring
+// (composer::Composer::GetRawSubString) is future work.
+bool IsTypedRawSurface(absl::string_view lowered_raw_input,
+                       absl::string_view surface) {
+  if (lowered_raw_input.empty() || surface.empty()) {
+    return false;
+  }
+  return lowered_raw_input.find(ToLowerAscii(surface)) !=
+         absl::string_view::npos;
+}
+
+bool AllSurfacesAreTypedRaw(absl::string_view lowered_raw_input,
+                            const std::vector<std::string>& surfaces) {
+  for (const std::string& surface : surfaces) {
+    if (!IsTypedRawSurface(lowered_raw_input, surface)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 ZenzOrthographyDecision ZenzOrthographyPolicy::Evaluate(
-    absl::string_view mozc_value, absl::string_view candidate_value) const {
+    absl::string_view mozc_value, absl::string_view candidate_value,
+    bool allow_script_transition, absl::string_view typed_raw_input) const {
   if (!Util::IsValidUtf8(mozc_value) || !Util::IsValidUtf8(candidate_value)) {
     ZenzOrthographyDecision decision;
     decision.allow = false;
@@ -154,7 +197,25 @@ ZenzOrthographyDecision ZenzOrthographyPolicy::Evaluate(
   const std::vector<std::string> candidate_runs =
       ExtractAlphabetRuns(candidate_value);
   const std::vector<std::string> baseline_runs = ExtractAlphabetRuns(mozc_value);
-  if (!StringMultisetsMatch(baseline_runs, candidate_runs)) {
+
+  // The mixed-input permission is deliberately narrow.  It applies only when
+  // the Mozc surface carries no ASCII letter at all, so it can never remove,
+  // mutate, or duplicate a surface that normal Mozc already selected; it only
+  // lets a pure-kana segment surface letters the user actually typed.  An
+  // empty baseline run list also implies an empty baseline technical-token
+  // list, because every technical token contains an ASCII letter, which is
+  // itself an ALPHABET run.  An empty raw string fails closed.  With the flag
+  // false this is all inert and behaviour is byte-identical to before.
+  const bool script_transition_allowed =
+      allow_script_transition && baseline_runs.empty() &&
+      !typed_raw_input.empty();
+  const std::string lowered_raw_input =
+      script_transition_allowed ? ToLowerAscii(typed_raw_input)
+                                : std::string();
+
+  if (!StringMultisetsMatch(baseline_runs, candidate_runs) &&
+      !(script_transition_allowed &&
+        AllSurfacesAreTypedRaw(lowered_raw_input, candidate_runs))) {
     ZenzOrthographyDecision decision;
     decision.allow = false;
     decision.reason = "alphabetic_surface_changed";
@@ -165,7 +226,9 @@ ZenzOrthographyDecision ZenzOrthographyPolicy::Evaluate(
       ExtractAsciiTechnicalTokens(mozc_value);
   const std::vector<std::string> candidate_tokens =
       ExtractAsciiTechnicalTokens(candidate_value);
-  if (!StringMultisetsMatch(baseline_tokens, candidate_tokens)) {
+  if (!StringMultisetsMatch(baseline_tokens, candidate_tokens) &&
+      !(script_transition_allowed &&
+        AllSurfacesAreTypedRaw(lowered_raw_input, candidate_tokens))) {
     ZenzOrthographyDecision decision;
     decision.allow = false;
     decision.reason = "technical_token_surface_changed";

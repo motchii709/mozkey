@@ -634,5 +634,77 @@ TEST(ZenzAdoptionPolicyTest, AllowsUnprojectableJapaneseOnlyRewrite) {
   EXPECT_EQ(result.value, "首都関西");
 }
 
+TEST(ZenzAdoptionPolicyTest,
+     AdoptsTypedAlphabeticSurfaceWhenScriptTransitionEnabled) {
+  ZenzAdoptionPolicy policy;
+  ZenzAdoptionInput input;
+  input.key = "ぎっとはぶにぷっしゅ";
+  input.mozc_value = "ぎっとはぶにぷっしゅ";
+  input.zenz_value = "GitHubにPush";
+  input.baseline_segments = {
+      {"ぎっとはぶ", "ぎっとはぶ"}, {"に", "に"}, {"ぷっしゅ", "ぷっしゅ"}};
+  input.allow_script_transition = true;
+  input.typed_raw_input = "githubnipush";
+
+  const ZenzAdoptionResult result = policy.Decide(input);
+  EXPECT_EQ(result.action, ZenzAdoptionResult::Action::kAcceptAsIs);
+  EXPECT_EQ(result.value, "GitHubにPush");
+  EXPECT_EQ(result.reason, "accepted");
+}
+
+TEST(ZenzAdoptionPolicyTest,
+     RevertsTypedAlphabeticSurfaceWhenScriptTransitionDisabled) {
+  ZenzAdoptionPolicy policy;
+  ZenzAdoptionInput input;
+  input.key = "ぎっとはぶにぷっしゅ";
+  input.mozc_value = "ぎっとはぶにぷっしゅ";
+  input.zenz_value = "GitHubにPush";
+  input.baseline_segments = {
+      {"ぎっとはぶ", "ぎっとはぶ"}, {"に", "に"}, {"ぷっしゅ", "ぷっしゅ"}};
+  // Historical behaviour: no permission, and the candidate is reverted even
+  // though the raw romaji would have licensed it.
+  input.typed_raw_input = "githubnipush";
+
+  const ZenzAdoptionResult result = policy.Decide(input);
+  EXPECT_EQ(result.action, ZenzAdoptionResult::Action::kAcceptWithRepair);
+  EXPECT_EQ(result.value, "ぎっとはぶにぷっしゅ");
+  EXPECT_EQ(result.reason, "orthographic_transition_repaired");
+}
+
+TEST(ZenzAdoptionPolicyTest,
+     RevertsUngroundedAlphabeticSurfaceWhenScriptTransitionEnabled) {
+  ZenzAdoptionPolicy policy;
+  ZenzAdoptionInput input;
+  input.key = "ぎっとはぶにぷっしゅ";
+  input.mozc_value = "ぎっとはぶにぷっしゅ";
+  input.zenz_value = "ZqxwにPush";
+  input.baseline_segments = {
+      {"ぎっとはぶ", "ぎっとはぶ"}, {"に", "に"}, {"ぷっしゅ", "ぷっしゅ"}};
+  input.allow_script_transition = true;
+  input.typed_raw_input = "githubnipush";
+
+  const ZenzAdoptionResult result = policy.Decide(input);
+  EXPECT_EQ(result.action, ZenzAdoptionResult::Action::kAcceptWithRepair);
+  EXPECT_EQ(result.value, "ぎっとはぶにPush");
+  EXPECT_EQ(result.reason, "orthographic_transition_repaired");
+}
+
+TEST(ZenzAdoptionPolicyTest,
+     RejectsUngroundedAlphabeticSurfaceWithoutBaselineSegments) {
+  ZenzAdoptionPolicy policy;
+  ZenzAdoptionInput input;
+  input.key = "ぎっとはぶにぷっしゅ";
+  input.mozc_value = "ぎっとはぶにぷっしゅ";
+  input.zenz_value = "ZqxwにPush";
+  input.allow_script_transition = true;
+  input.typed_raw_input = "githubnipush";
+
+  const ZenzAdoptionResult result = policy.Decide(input);
+  EXPECT_EQ(result.action, ZenzAdoptionResult::Action::kReject);
+  EXPECT_EQ(result.value, "ぎっとはぶにぷっしゅ");
+  EXPECT_EQ(result.reason,
+            "orthographic_transition_missing_baseline_segments");
+}
+
 }  // namespace
 }  // namespace mozc::session

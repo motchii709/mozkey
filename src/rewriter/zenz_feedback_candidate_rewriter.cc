@@ -260,6 +260,17 @@ bool ZenzFeedbackCandidateRewriter::Rewrite(
     return false;
   }
 
+  // Mixed English/Japanese input (the "Auto" switch): apply the same
+  // relaxation as the live-conversion path so that a candidate Auto mode
+  // accepts is not dropped on the way into the candidate list.  The raw string
+  // is read only when the switch is on, so the switch-off path is unchanged.
+  const std::string typed_raw_input =
+      request.config().use_auto_language_switch()
+          ? std::string(request.composer().GetRawString())
+          : std::string();
+  const bool allow_script_transition =
+      request.config().use_auto_language_switch();
+
   const session::ZenzOrthographyPolicy orthography_policy;
   for (const session::ZenzFeedbackCandidate& feedback_candidate :
        ranked_candidates) {
@@ -276,7 +287,8 @@ bool ZenzFeedbackCandidateRewriter::Rewrite(
     }
 
     const session::ZenzOrthographyDecision orthography_decision =
-        orthography_policy.Evaluate(original_top_value, zenz_value);
+        orthography_policy.Evaluate(original_top_value, zenz_value,
+                                    allow_script_transition, typed_raw_input);
     if (!orthography_decision.allow) {
       continue;
     }

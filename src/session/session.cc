@@ -6526,6 +6526,16 @@ bool Session::MaybeApplyZenzFeedbackLiveCorrection(
         live_conversion_preedit_output_, live_conversion_key_,
         live_conversion_value_);
 
+    // Mixed English/Japanese input (the "Auto" switch): allow a pure-kana Mozc
+    // surface to adopt ASCII letters only when the user actually typed them as
+    // raw romaji.  The raw string is read only when the switch is on so the
+    // switch-off path is unaffected.
+    const std::string typed_raw_input =
+        config.use_auto_language_switch() ? context_->composer().GetRawString()
+                                          : std::string();
+    adoption_input.allow_script_transition = config.use_auto_language_switch();
+    adoption_input.typed_raw_input = typed_raw_input;
+
     const ZenzAdoptionResult adoption =
         zenz_adoption_policy_.Decide(adoption_input);
     if (adoption.action == ZenzAdoptionResult::Action::kReject) {
@@ -7303,6 +7313,16 @@ bool Session::ApplyZenzLiveCorrectionResult(
   adoption_input.zenz_value = zenz_value;
   adoption_input.protected_spans = pending_zenz_live_.protected_spans;
   adoption_input.baseline_segments = pending_zenz_live_.baseline_segments;
+
+  // Mixed English/Japanese input (the "Auto" switch): allow a pure-kana Mozc
+  // surface to adopt ASCII letters only when the user actually typed them as
+  // raw romaji.  The raw string is read only when the switch is on so the
+  // switch-off path is unaffected.
+  const std::string typed_raw_input =
+      config.use_auto_language_switch() ? context_->composer().GetRawString()
+                                        : std::string();
+  adoption_input.allow_script_transition = config.use_auto_language_switch();
+  adoption_input.typed_raw_input = typed_raw_input;
 
   const ZenzAdoptionResult adoption =
       zenz_adoption_policy_.Decide(adoption_input);
