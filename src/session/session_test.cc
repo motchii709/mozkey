@@ -94,6 +94,7 @@ class SessionTestPeer : testing::TestPeer<Session> {
   PEER_METHOD(IsFullWidthInsertSpace);
   PEER_METHOD(PushUndoContext);
   PEER_METHOD(MaybeApplyZenzFeedbackLiveCorrection);
+  PEER_METHOD(MaybeScheduleZenzLiveCorrection);
   PEER_METHOD(ApplyZenzLiveCorrectionResult);
   PEER_METHOD(SetPendingZenzFeedbackAccepted);
   PEER_METHOD(SetPendingZenzFeedbackComparison);
@@ -3347,6 +3348,64 @@ TEST_F(SessionTest,
   EXPECT_PREEDIT("あい", command);
   ASSERT_TRUE(command.output().has_callback());
   EXPECT_EQ(command.output().callback().delay_millisec(), 24);
+}
+
+// Measured on the bundled zenz-v3.2-small-Q5_K_M with greedy decoding: the left
+// context is what makes context-dependent readings correct, but for a reading
+// that contains ASCII letters it makes the result worse -- typing
+// "NEWくみくみスロープ" came back as "NEW組み組スロープ" with context and
+// correctly without it (+2/30 overall).  The scheduled prompt must therefore
+// carry a left context exactly when the reading has no ASCII letter.
+TEST_F(SessionTest, ZenzPromptDropsLeftContextOnlyForAsciiReadings) {
+  MockEngine engine;
+  CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  SessionTestPeer session_peer(session);
+  InitSessionToPrecomposition(&session);
+
+  config::Config config;
+  config::ConfigHandler::GetDefaultConfig(&config);
+  config.set_use_live_conversion(true);
+  config.set_use_zenz_live_correction(true);
+  config.set_zenz_live_correction_min_key_length(2);
+  config.set_zenz_live_correction_left_context_length(24);
+  // Keep the request pending so this test never starts a scorer pipe client.
+  config.set_zenz_live_correction_delay_msec(1000);
+  session.SetConfig(config);
+
+  const std::string left_context = "あしたはあめです";
+  session_peer.context_()->mutable_client_context()->set_preceding_text(
+      left_context);
+  session_peer.context_()->set_state(ImeContext::CONVERSION);
+  session_peer.live_conversion_active_() = true;
+
+  const auto scheduled_prompt = [&session_peer](const std::string& key,
+                                                const std::string& value) {
+    session_peer.live_conversion_key_() = key;
+    session_peer.live_conversion_value_() = value;
+    commands::Command command;
+    EXPECT_TRUE(session_peer.MaybeScheduleZenzLiveCorrection(&command));
+    return session_peer.pending_zenz_live_().prompt;
+  };
+
+  // A reading written only in Japanese keeps the measured left context.
+  const std::string kana_prompt =
+      scheduled_prompt("にゅーくみくみすろーぷ", "ニュークミクミスロープ");
+  EXPECT_NE(kana_prompt.find(left_context), std::string::npos);
+
+  // Letters are the boundary, not ASCII in general: a digit keeps the context.
+  const std::string digit_prompt =
+      scheduled_prompt("ばーじょん2", "バージョン2");
+  EXPECT_NE(digit_prompt.find(left_context), std::string::npos);
+
+  // The reported regression: this reading is sent without any left context.
+  const std::string ascii_prompt =
+      scheduled_prompt("NEWくみくみすろーぷ", "NEWくみくみスロープ");
+  EXPECT_EQ(ascii_prompt.find(left_context), std::string::npos);
+
+  // Only the context is dropped; the reading still reaches Zenz unchanged.
+  EXPECT_NE(ascii_prompt.find("NEWクミクミスロープ"), std::string::npos);
 }
 
 TEST_F(SessionTest,

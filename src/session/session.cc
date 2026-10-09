@@ -1494,6 +1494,17 @@ bool HasAsciiLetterOrDigit(absl::string_view value) {
   return false;
 }
 
+// True when a Zenz reading contains at least one ASCII letter (A-Za-z).
+// Digits, punctuation, and full-width Latin are deliberately not letters.
+bool HasAsciiLetter(absl::string_view value) {
+  for (const unsigned char c : value) {
+    if ((('A' <= c) && (c <= 'Z')) || (('a' <= c) && (c <= 'z'))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::vector<std::string> ExtractAsciiIdentitySurfaces(
     absl::string_view value) {
   std::vector<std::string> surfaces;
@@ -6656,8 +6667,19 @@ bool Session::MaybeScheduleZenzLiveCorrection(commands::Command* command) {
   const std::string& right_context_for_prompt =
       assembled_context.right.prompt_context;
 
+  // Measured (zenz-v3.2-small-Q5_K_M, greedy): the left context is the single
+  // biggest quality variable for Japanese readings (14/14 context-dependent
+  // cases with it, 6/14 without), but it makes ASCII-containing readings worse
+  // -- typing "NEWくみくみスロープ" came back as "NEW組み組スロープ" with context
+  // and correctly without it (+2/30 overall).  Only an ASCII-containing reading
+  // drops the context here; any reading without an ASCII letter keeps it
+  // byte-for-byte.
+  const bool reading_contains_ascii_letter =
+      HasAsciiLetter(live_conversion_key_);
+
   ZenzPromptOptions prompt_options;
-  prompt_options.left_context = left_context_for_prompt;
+  prompt_options.left_context =
+      reading_contains_ascii_letter ? std::string() : left_context_for_prompt;
   prompt_options.right_context = right_context_for_prompt;
   prompt_options.profile = config.zenz_live_correction_profile();
   prompt_options.topic = config.zenz_live_correction_topic();
