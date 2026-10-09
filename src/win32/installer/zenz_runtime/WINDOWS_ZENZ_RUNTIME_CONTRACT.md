@@ -13,14 +13,16 @@
 - file: `models/zenz-v3.2-small-Q5_K_M.gguf`
 - SHA256: `29C223D4C23327B80FD13EBB5AB2555057A46317997D5DA391584FFBEF0DB673`
 
-## Draft model identity (speculative decoding)
+## Draft model identity (shipped, no longer launched)
 
 - file: `models/zenz-v3.2-xsmall-Q5_K_M.gguf`
 - SHA256: `00C64B3D318045A708D0CAD5434FACCAB10F5481A49E6362864551FD0995FA58`
 - source: `https://huggingface.co/Miwa-Keita/zenz-v3.2-xsmall-gguf` (Apache-2.0)
-- the scorer enables speculative decoding when this file is present next to the
-  target model by appending `--model-draft` to the llama-server launch
-  arguments; absent file means the previous no-draft behavior unchanged
+- the file may still be present next to the target model, but the scorer no
+  longer requests speculative decoding: it never appends `--model-draft`, so the
+  llama-server launch arguments do not depend on whether this file is present.
+  The draft model measured no speed difference (197.6 ms vs 188.4 ms p50) and
+  identical greedy output for an extra ~21 MB model in memory
 - both models share the GPT-2 architecture and 6000-token GPT-2 BPE tokenizer
   (`tokenizer.ggml.pre=gpt2-small-japanese-char` in both GGUFs); llama-server
   rejects tokenizer mismatches at startup
@@ -64,11 +66,12 @@
 - `LLAMA_BUILD_UI=OFF`
 - `LLAMA_OPENSSL=OFF`
 - scorer launches `llama-server` with `--parallel 1`
-- when `models/zenz-v3.2-xsmall-Q5_K_M.gguf` is present, the scorer additionally
-  launches with `--model-draft <that path> --spec-draft-n-max 8` for speculative
-  decoding; when absent the launch arguments are unchanged from before
-  (this pinned llama.cpp build rejects the legacy `--draft-max` spelling with a
-  hard error, so the `--spec-draft-n-max` name must be used)
+- the scorer does not request speculative decoding: it never passes
+  `--model-draft` / `--spec-draft-n-max`, so the launch arguments do not depend
+  on whether `models/zenz-v3.2-xsmall-Q5_K_M.gguf` is present
+  (if that flag is ever restored, this pinned llama.cpp build rejects the legacy
+  `--draft-max` spelling with a hard error, so the `--spec-draft-n-max` name
+  must be used)
 - server binds to `127.0.0.1`
 - scorer supplies a generated API key
 - the Windows installer installs enabled outbound/block firewall rules for `mozc_zenz_scorer.exe` and `llama-server.exe`, in addition to the existing Mozc runtime rules
