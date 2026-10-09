@@ -55,12 +55,21 @@ struct ZenzOrthographyDecision {
 // surface that contains no ASCII letter at all (pure kana) may become ASCII
 // letters, but only when every ASCII surface the candidate introduces was
 // literally typed by the user as raw romaji, supplied in `typed_raw_input`
-// (composer::Composer::GetRawString()).  Matching is a case-insensitive
-// contiguous substring test, so "github" typed as raw romaji licenses the
-// candidate run "GitHub", while invented or transliteration-only spellings such
-// as "Tokyo" typed as "toukyou" stay rejected.  Removal, mutation, and
-// duplication of existing ASCII surfaces remain rejected, `typed_raw_input` is
-// never enough on its own, and an empty `typed_raw_input` fails closed.
+// (composer::Composer::GetRawString()).  Matching is case-insensitive and
+// accepts a contiguous substring ("github" typed as raw romaji licenses the
+// candidate run "GitHub") or a consonant-skeleton subsequence of the typed
+// romaji: vowels are dropped on both sides and the remaining consonants must
+// appear in the same order.  The consonant form is what makes a respelling work
+// at all, because romanisation inserts epenthetic vowels that reorder letters
+// (the word "GitHub" versus the typed "gittohabu", where ハブ is "habu"), while
+// an invented spelling such as "Google" typed as "kanzidesu" stays rejected
+// because its 'g' was never typed.  Consonant-skeleton matching also admits
+// transliterations and short consonant subsets that the substring rule rejected,
+// for example "Tokyo" from "toukyou"; that widening is the deliberately accepted
+// cost of the relaxation and is recorded in orthography-subsequence-notes.md.
+// Removal, mutation, and duplication of
+// existing ASCII surfaces remain rejected, `typed_raw_input` is never enough on
+// its own, and an empty `typed_raw_input` fails closed.
 // With the flag false the method behaves exactly as before.
 class ZenzOrthographyPolicy {
  public:

@@ -151,21 +151,81 @@ std::string ToLowerAscii(absl::string_view value) {
   return lowered;
 }
 
-// True when `surface` was literally typed by the user.  `lowered_raw_input` is
-// the case-folded composer raw romaji.  This is the interim, deliberately
-// narrow grounding rule for the mixed-input permission: the candidate surface
-// must appear as a contiguous substring of the raw keystrokes, so an English
-// stretch the user typed as "github" licenses "GitHub", while an invented
-// spelling ("Zqxw") or a transliteration the user never typed ("Tokyo" from
-// "toukyou") is still rejected.  Tightening this to a per-segment raw substring
-// (composer::Composer::GetRawSubString) is future work.
+// ASCII vowels are dropped before the order comparison because Japanese
+// romanisation inserts epenthetic vowels that shuffle the letters: ギットハブ is
+// typed "gittohabu" (ハブ = "habu", so 'b' precedes 'u'), while the word itself
+// is "GitHub" (the 'u' precedes the 'b').  The consonant order, not the full
+// letter order, is the part a respelling preserves.  A surface made only of
+// vowels has an empty skeleton and falls back to the contiguous rule.
+bool IsAsciiVowel(const char c) {
+  return c == 'a' || c == 'i' || c == 'u' || c == 'e' || c == 'o';
+}
+
+std::string ConsonantSkeleton(absl::string_view lowered) {
+  std::string skeleton;
+  skeleton.reserve(lowered.size());
+  for (const char c : lowered) {
+    if (!IsAsciiVowel(c)) {
+      skeleton.push_back(c);
+    }
+  }
+  return skeleton;
+}
+
+// True when the consonant skeleton of `lowered_surface` occurs in the consonant
+// skeleton of `lowered_raw_input` in order but not necessarily contiguously.
+// Both arguments must already be ASCII case-folded.
+bool IsConsonantSkeletonSubsequenceOfTypedRaw(
+    absl::string_view lowered_raw_input, absl::string_view lowered_surface) {
+  const std::string needle = ConsonantSkeleton(lowered_surface);
+  if (needle.empty()) {
+    return false;
+  }
+
+  const std::string haystack = ConsonantSkeleton(lowered_raw_input);
+  size_t next = 0;
+  for (const char c : haystack) {
+    if (c == needle[next] && ++next == needle.size()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// True when `surface` could plausibly have been typed by the user.
+// `lowered_raw_input` is the case-folded composer raw romaji.  This is the
+// grounding rule for the mixed-input permission, and it accepts two shapes:
+//
+//   1. a contiguous substring of the raw keystrokes -- the historical rule,
+//      tested first so every previously licensed surface keeps its old path;
+//   2. a consonant-skeleton subsequence of them -- every consonant of the
+//      surface was typed, in order, ignoring the vowels that romanisation
+//      inserted.
+//
+// The second shape exists because a Japanese respelling of a Latin word is not
+// letter-order preserving: the word "GitHub" reverses the 'u' and the 'b' of the
+// typed "gittohabu" (ハブ = "habu").  The consonant order is what still blocks
+// arbitrary Latin invention while admitting a respelling: "Google" against
+// "kanzidesu" has no 'g' at all.
+//
+// Deliberate residual risk: dropping vowels and contiguity also licenses
+// transliterations and short consonant subsets of the romaji, for example
+// "Tokyo" from "toukyou".  That widening is the accepted cost of the relaxation
+// and is recorded in orthography-subsequence-notes.md.  Tightening this to a
+// per-segment raw substring (composer::Composer::GetRawSubString) is future
+// work.
 bool IsTypedRawSurface(absl::string_view lowered_raw_input,
                        absl::string_view surface) {
   if (lowered_raw_input.empty() || surface.empty()) {
     return false;
   }
-  return lowered_raw_input.find(ToLowerAscii(surface)) !=
-         absl::string_view::npos;
+
+  const std::string lowered_surface = ToLowerAscii(surface);
+  if (lowered_raw_input.find(lowered_surface) != absl::string_view::npos) {
+    return true;
+  }
+  return IsConsonantSkeletonSubsequenceOfTypedRaw(lowered_raw_input,
+                                                  lowered_surface);
 }
 
 bool AllSurfacesAreTypedRaw(absl::string_view lowered_raw_input,

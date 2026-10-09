@@ -100,6 +100,12 @@ TEST(ZenzOrthographyPolicyTest,
                   .Evaluate("ぎっとはぶにぷっしゅ", "GitHubにPush",
                             /*allow_script_transition=*/true, "githubnipush")
                   .allow);
+  // The historical contiguous rule is unchanged, including this exact pair:
+  // both runs are substrings of the typed romaji.
+  EXPECT_TRUE(policy
+                  .Evaluate("ぎっとはぶにぷっしゅ", "GitHubにpush",
+                            /*allow_script_transition=*/true, "githubnipush")
+                  .allow);
   // The permission never stands alone: without the typed raw romaji the same
   // transition is still rejected.
   EXPECT_FALSE(policy
@@ -117,12 +123,6 @@ TEST(ZenzOrthographyPolicyTest,
                       /*allow_script_transition=*/true, "toukyou");
   EXPECT_FALSE(decision.allow);
   EXPECT_EQ(decision.reason, "alphabetic_surface_changed");
-
-  // A transliteration of the kana reading is not something the user typed.
-  EXPECT_FALSE(policy
-                   .Evaluate("とうきょう", "Tokyo",
-                             /*allow_script_transition=*/true, "toukyou")
-                   .allow);
 }
 
 TEST(ZenzOrthographyPolicyTest,
@@ -132,6 +132,13 @@ TEST(ZenzOrthographyPolicyTest,
   EXPECT_FALSE(policy
                    .Evaluate("ぎっとはぶにぷっしゅ", "GitHubにPush",
                              /*allow_script_transition=*/false, "githubnipush")
+                   .allow);
+  // A surface that only the subsequence rule could ground is rejected just as
+  // firmly while the switch is off.
+  EXPECT_FALSE(policy
+                   .Evaluate("ぷっし", "push",
+                             /*allow_script_transition=*/false,
+                             "gittohabunipusshishitehosiikana")
                    .allow);
   // The defaulted arguments keep the historical two-argument call contract.
   EXPECT_FALSE(policy.Evaluate("ぎっとはぶにぷっしゅ", "GitHubにPush").allow);
@@ -155,6 +162,141 @@ TEST(ZenzOrthographyPolicyTest,
                    .Evaluate("AIを使う", "AIとAIを使う",
                              /*allow_script_transition=*/true, "aiaiai")
                    .allow);
+}
+
+TEST(ZenzOrthographyPolicyTest,
+     AcceptsConsonantSkeletonGroundedSurfaceWhenScriptTransitionEnabled) {
+  ZenzOrthographyPolicy policy;
+
+  // "push" is not a contiguous substring of the typed romaji, which spells it
+  // "pusshi", but its consonant skeleton p-s-h is an in-order subsequence of the
+  // typed skeleton p-s-s-h.
+  EXPECT_TRUE(policy
+                  .Evaluate("ぷっし", "push",
+                            /*allow_script_transition=*/true,
+                            "gittohabunipusshishitehosiikana")
+                  .allow);
+  // Pins the predicate itself rather than a plausible input: the skeleton of
+  // "KdE" (k-d) is an in-order subsequence of "kanzidesu" (k-n-z-d-s).
+  EXPECT_TRUE(policy
+                  .Evaluate("かんじです", "KdE",
+                            /*allow_script_transition=*/true, "kanzidesu")
+                  .allow);
+}
+
+TEST(ZenzOrthographyPolicyTest,
+     RejectsConsonantSkeletonWithALetterTheUserNeverTyped) {
+  ZenzOrthographyPolicy policy;
+
+  // "kanzidesu" has no 'g' at all, so the consonant rule cannot ground an
+  // invented Latin word, whatever order its letters are in.
+  const ZenzOrthographyDecision decision =
+      policy.Evaluate("かんじです", "Google",
+                      /*allow_script_transition=*/true, "kanzidesu");
+  EXPECT_FALSE(decision.allow);
+  EXPECT_EQ(decision.reason, "alphabetic_surface_changed");
+  // Nor can it ground a single letter that was never typed.
+  EXPECT_FALSE(policy
+                   .Evaluate("かんじです", "Q",
+                             /*allow_script_transition=*/true, "kanzidesu")
+                   .allow);
+  // An empty raw string still fails closed for a skeleton-eligible surface.
+  EXPECT_FALSE(policy
+                   .Evaluate("かんじです", "KDE",
+                             /*allow_script_transition=*/true, "")
+                   .allow);
+}
+
+TEST(ZenzOrthographyPolicyTest,
+     RejectsConsonantSkeletonWithDigitsOrConnectorsTheUserNeverTyped) {
+  ZenzOrthographyPolicy policy;
+
+  // The letters-only run "GPT" is grounded by "gptgoo", but the technical
+  // token "GPT-5" is not: neither '-' nor '5' was typed, so the token rule is
+  // the one that rejects.
+  const ZenzOrthographyDecision decision =
+      policy.Evaluate("じーぴーてぃーご", "GPT-5",
+                      /*allow_script_transition=*/true, "gptgoo");
+  EXPECT_FALSE(decision.allow);
+  EXPECT_EQ(decision.reason, "technical_token_surface_changed");
+  // With romaji whose skeleton does not contain g-p-t in order, the run rule is
+  // the one that rejects.
+  EXPECT_FALSE(policy
+                   .Evaluate("じーぴーてぃーご", "GPT-5",
+                             /*allow_script_transition=*/true, "jiipitiigoo")
+                   .allow);
+}
+
+TEST(ZenzOrthographyPolicyTest, HasNoMinimumAlphabetRunLength) {
+  ZenzOrthographyPolicy policy;
+
+  // Pre-existing behaviour that this change does not alter: the policy
+  // constrains where letters came from, not how many there are, so a single
+  // typed letter is licensed.  There is no minimum run length here.
+  EXPECT_TRUE(policy
+                  .Evaluate("かんじです", "K",
+                            /*allow_script_transition=*/true, "kanzidesu")
+                  .allow);
+}
+
+TEST(ZenzOrthographyPolicyTest,
+     RejectsSurfaceWhoseConsonantsWereTypedOutOfOrder) {
+  ZenzOrthographyPolicy policy;
+
+  // The skeleton must be consumed in order: "Bath" (b-t-h) cannot be grounded
+  // by "gittohabu" (g-t-t-h-b) because nothing follows its 'b'.
+  EXPECT_FALSE(policy
+                   .Evaluate("ぎっとはぶ", "Bath",
+                             /*allow_script_transition=*/true, "gittohabu")
+                   .allow);
+  // The same romaji does ground the respelling once the vowels are ignored.
+  EXPECT_TRUE(policy
+                  .Evaluate("ぎっとはぶ", "Hub",
+                            /*allow_script_transition=*/true, "gittohabu")
+                  .allow);
+}
+
+TEST(ZenzOrthographyPolicyTest,
+     NowAcceptsATransliterationWhoseConsonantsWereTypedInOrder) {
+  ZenzOrthographyPolicy policy;
+
+  // Regression introduced by consonant-skeleton grounding and consciously
+  // accepted: "tokyo" (t-k-y) and "toukyou" (t-k-y) share a consonant skeleton,
+  // so the transliteration that the substring rule deliberately rejected is now
+  // licensed.  The invented spelling beside it stays rejected.
+  EXPECT_TRUE(policy
+                  .Evaluate("とうきょう", "Tokyo",
+                            /*allow_script_transition=*/true, "toukyou")
+                  .allow);
+  EXPECT_FALSE(policy
+                   .Evaluate("とうきょう", "Zqxw",
+                             /*allow_script_transition=*/true, "toukyou")
+                   .allow);
+}
+
+TEST(ZenzOrthographyPolicyTest, AcceptsTheHeadlinePhoneticRespelling) {
+  ZenzOrthographyPolicy policy;
+
+  // The headline mixed-input example: typing
+  // "gittohabunipusshishitehosiikana" (ぎっとはぶにぷっししてほしいかな) and asking
+  // Zenz for "GitHubにpushしてほしいかな".  "GitHub" is grounded because its
+  // consonant skeleton g-t-h-b is an in-order subsequence of the typed skeleton
+  // g-t-t-h-b-..., which no full-letter rule can see: ハブ is typed "habu", so the
+  // typed letters are h-a-b-u while the word needs u-b.  "push" is grounded by
+  // the same rule (p-s-h inside p-s-s-h), and the candidate as a whole is
+  // therefore adopted.
+  EXPECT_TRUE(policy
+                  .Evaluate("ぎっとはぶにぷっししてほしいかな",
+                            "GitHubにpushしてほしいかな",
+                            /*allow_script_transition=*/true,
+                            "gittohabunipusshishitehosiikana")
+                  .allow);
+  EXPECT_TRUE(policy
+                  .Evaluate("ぎっとはぶにぷっししてほしいかな",
+                            "pushしてほしいかな",
+                            /*allow_script_transition=*/true,
+                            "gittohabunipusshishitehosiikana")
+                  .allow);
 }
 
 }  // namespace
