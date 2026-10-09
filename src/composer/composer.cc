@@ -1130,24 +1130,8 @@ void Composer::AutoSwitchMode() {
   const std::string key = composition_.GetStringWithTransliterator(
       GetTransliterator(transliteration::HALF_ASCII));
 
-  // The Latin word rule (use_auto_language_switch) only applies while the
-  // composition has not been romanized into kana, so Japanese text is never
-  // reinterpreted as an English word.  A chunk whose conversion differs from
-  // its raw input has been converted to kana; direct ASCII input keeps
-  // conversion == raw and stays eligible.
-  bool enable_latin_word_rule = config_->use_auto_language_switch();
-  if (enable_latin_word_rule) {
-    for (const CharChunk& chunk : composition_.chunks()) {
-      const absl::string_view conversion = chunk.conversion();
-      if (!conversion.empty() && conversion != chunk.raw()) {
-        enable_latin_word_rule = false;
-        break;
-      }
-    }
-  }
-
   const ModeSwitchingHandler::Rule mode_switching =
-      ModeSwitchingHandler::GetModeSwitchingRule(key, enable_latin_word_rule);
+      ModeSwitchingHandler::GetModeSwitchingRule(key);
 
   // |display_mode| affects the existing composition the user typed.
   switch (mode_switching.display_mode) {

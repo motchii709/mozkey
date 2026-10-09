@@ -39,7 +39,7 @@ namespace mozc {
 namespace composer {
 
 ModeSwitchingHandler::Rule ModeSwitchingHandler::GetModeSwitchingRule(
-    absl::string_view key, bool enable_latin_word_rule) {
+    absl::string_view key) {
   // Modern compilers are smart enough to optimize this kind of multiple string
   // comparisons. Neither flat_hash_map nor sorted array is necessary for this
   // small number of patterns.
@@ -57,32 +57,12 @@ ModeSwitchingHandler::Rule ModeSwitchingHandler::GetModeSwitchingRule(
     return {HALF_ALPHANUMERIC, HALF_ALPHANUMERIC};
   }
 
-  // Mixed English/Japanese input: a plain Latin word is kept alphanumeric
-  // and the input mode reverts to the previous mode, the same treatment the
-  // keyword rules above give to brand words like "Google".  Gated by
-  // config::Config::use_auto_language_switch at the call site.
-  if (enable_latin_word_rule && IsLatinWord(key)) {
-    return {PREFERRED_ALPHANUMERIC, REVERT_TO_PREVIOUS_MODE};
-  }
-
   return {NO_CHANGE, NO_CHANGE};
 }
 
 bool ModeSwitchingHandler::IsDriveLetter(absl::string_view key) {
   return key.size() == 3 && absl::ascii_isalpha(key[0]) && key[1] == ':' &&
          key[2] == '\\';
-}
-
-bool ModeSwitchingHandler::IsLatinWord(absl::string_view key) {
-  if (key.size() < 2) {
-    return false;
-  }
-  for (const char c : key) {
-    if (!absl::ascii_isalpha(c)) {
-      return false;
-    }
-  }
-  return true;
 }
 
 }  // namespace composer

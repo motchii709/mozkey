@@ -1401,6 +1401,44 @@ TEST_F(ComposerTest, AutoSwitchCompositionModeEnabled) {
   }
 }
 
+// The mixed English/Japanese input setting (use_auto_language_switch) belongs to
+// the conversion layer, so it must not reach the composer.  The key handed to
+// AutoSwitchMode is the half-width ASCII transliteration of the composition, so
+// こんにちは arrives as "konnnichiha" -- a plain Latin word.  Matching that turned
+// the output mode into HALF_ASCII and romanized every Japanese word.
+TEST_F(ComposerTest, AutoSwitchCompositionModeKeepsKanaWhenLanguageSwitchIsOn) {
+  config_->set_preedit_method(Config::ROMAN);
+  config_->set_auto_switch_composition_mode(true);
+  config_->set_use_auto_language_switch(true);
+
+  table_->InitializeWithRequestAndConfig(*request_, *config_);
+
+  InsertKey("k", composer_.get());
+  InsertKey("o", composer_.get());
+  InsertKey("n", composer_.get());
+  InsertKey("n", composer_.get());
+  InsertKey("n", composer_.get());
+  InsertKey("i", composer_.get());
+  InsertKey("t", composer_.get());
+  InsertKey("i", composer_.get());
+  InsertKey("h", composer_.get());
+  InsertKey("a", composer_.get());
+
+  EXPECT_EQ(composer_->GetStringForPreedit(), "こんにちは");
+  EXPECT_EQ(composer_->GetInputMode(), transliteration::HIRAGANA);
+  EXPECT_EQ(composer_->GetOutputMode(), transliteration::HIRAGANA);
+
+  // The keyword rules are unaffected by the setting.
+  composer_->Reset();
+  InsertKey("h", composer_.get());
+  InsertKey("t", composer_.get());
+  InsertKey("t", composer_.get());
+  InsertKey("p", composer_.get());
+
+  EXPECT_EQ(composer_->GetStringForPreedit(), "http");
+  EXPECT_EQ(composer_->GetInputMode(), transliteration::HALF_ASCII);
+}
+
 TEST_F(ComposerTest, AutoSwitchCompositionModeDisabled) {
   config_->set_preedit_method(Config::ROMAN);
   config_->set_auto_switch_composition_mode(false);

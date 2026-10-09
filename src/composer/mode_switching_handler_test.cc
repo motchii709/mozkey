@@ -101,53 +101,6 @@ TEST(ModeSwitchingHandlerTest, IsDriveLetter) {
   EXPECT_FALSE(ModeSwitchingHandler::IsDriveLetter("6:\\"));
 }
 
-TEST(ModeSwitchingHandlerTest, IsLatinWord) {
-  EXPECT_TRUE(ModeSwitchingHandler::IsLatinWord("GitHub"));
-  EXPECT_TRUE(ModeSwitchingHandler::IsLatinWord("github"));
-  EXPECT_TRUE(ModeSwitchingHandler::IsLatinWord("ab"));
-  EXPECT_FALSE(ModeSwitchingHandler::IsLatinWord("a"));
-  EXPECT_FALSE(ModeSwitchingHandler::IsLatinWord("push!"));
-  EXPECT_FALSE(ModeSwitchingHandler::IsLatinWord("git hub"));
-  EXPECT_FALSE(ModeSwitchingHandler::IsLatinWord("abc1"));
-  EXPECT_FALSE(ModeSwitchingHandler::IsLatinWord("ミク"));
-  EXPECT_FALSE(ModeSwitchingHandler::IsLatinWord(""));
-}
-
-TEST(ModeSwitchingHandlerTest, LatinWordRuleRespectsFlag) {
-  // Default (flag off): unchanged historical behavior.
-  EXPECT_THAT(
-      ModeSwitchingHandler::GetModeSwitchingRule("foobar"),
-      RuleEq(ModeSwitchingHandler::NO_CHANGE, ModeSwitchingHandler::NO_CHANGE));
-
-  // Flag on: a plain Latin word is kept alphanumeric and the input mode
-  // reverts to the previous mode, like the brand keyword rules.
-  EXPECT_THAT(ModeSwitchingHandler::GetModeSwitchingRule("foobar", true),
-              RuleEq(ModeSwitchingHandler::PREFERRED_ALPHANUMERIC,
-                     ModeSwitchingHandler::REVERT_TO_PREVIOUS_MODE));
-  EXPECT_THAT(ModeSwitchingHandler::GetModeSwitchingRule("GitHub", true),
-              RuleEq(ModeSwitchingHandler::PREFERRED_ALPHANUMERIC,
-                     ModeSwitchingHandler::REVERT_TO_PREVIOUS_MODE));
-
-  // Non-Latin text never triggers the rule, even with the flag on.
-  EXPECT_THAT(
-      ModeSwitchingHandler::GetModeSwitchingRule("こんにちは", true),
-      RuleEq(ModeSwitchingHandler::NO_CHANGE, ModeSwitchingHandler::NO_CHANGE));
-  EXPECT_THAT(
-      ModeSwitchingHandler::GetModeSwitchingRule("git!", true),
-      RuleEq(ModeSwitchingHandler::NO_CHANGE, ModeSwitchingHandler::NO_CHANGE));
-
-  // Keyword and drive letter rules take precedence over the Latin word rule.
-  EXPECT_THAT(ModeSwitchingHandler::GetModeSwitchingRule("google", true),
-              RuleEq(ModeSwitchingHandler::PREFERRED_ALPHANUMERIC,
-                     ModeSwitchingHandler::REVERT_TO_PREVIOUS_MODE));
-  EXPECT_THAT(ModeSwitchingHandler::GetModeSwitchingRule("http", true),
-              RuleEq(ModeSwitchingHandler::HALF_ALPHANUMERIC,
-                     ModeSwitchingHandler::HALF_ALPHANUMERIC));
-  EXPECT_THAT(ModeSwitchingHandler::GetModeSwitchingRule("C:\\", true),
-              RuleEq(ModeSwitchingHandler::HALF_ALPHANUMERIC,
-                     ModeSwitchingHandler::HALF_ALPHANUMERIC));
-}
-
 }  // namespace
 }  // namespace composer
 }  // namespace mozc
