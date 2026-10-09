@@ -70,6 +70,10 @@ struct ZenzOrthographyDecision {
 // Removal, mutation, and duplication of
 // existing ASCII surfaces remain rejected, `typed_raw_input` is never enough on
 // its own, and an empty `typed_raw_input` fails closed.
+// The permission is scoped to ASCII letters: a candidate that introduces none
+// (an ordinary Japanese rewrite such as くみ -> 組, or a fullwidth surface such
+// as "ＡＢＣ") is decided by the historical comparison alone, so the flag cannot
+// change its verdict.
 // With the flag false the method behaves exactly as before.
 class ZenzOrthographyPolicy {
  public:

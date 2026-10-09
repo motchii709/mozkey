@@ -299,5 +299,56 @@ TEST(ZenzOrthographyPolicyTest, AcceptsTheHeadlinePhoneticRespelling) {
                   .allow);
 }
 
+TEST(ZenzOrthographyPolicyTest,
+     IgnoresScriptTransitionWhenCandidateHasNoAsciiLetter) {
+  ZenzOrthographyPolicy policy;
+
+  // くみ -> 組 is a Japanese-only rewrite, so the mixed-input permission never
+  // applies to it.  With the switch off the historical comparison accepts it
+  // (see AllowsJapaneseOnlyRewrite) and the switch must not change that: the
+  // verdict is the same, accepted, in both states even though the typed raw
+  // romaji is available.
+  const ZenzOrthographyDecision kana_rewrite_enabled =
+      policy.Evaluate("くみ", "組", /*allow_script_transition=*/true, "kumi");
+  const ZenzOrthographyDecision kana_rewrite_disabled =
+      policy.Evaluate("くみ", "組", /*allow_script_transition=*/false, "kumi");
+  EXPECT_TRUE(kana_rewrite_disabled.allow);
+  EXPECT_EQ(kana_rewrite_enabled.allow, kana_rewrite_disabled.allow);
+  EXPECT_EQ(kana_rewrite_enabled.reason, kana_rewrite_disabled.reason);
+
+  // The permission is ASCII-only, so it cannot license a non-ASCII "letter"
+  // surface either: fullwidth ＡＢＣ is an ALPHABET run without a single ASCII
+  // letter, and it is rejected exactly as it is with the switch off.
+  const ZenzOrthographyDecision fullwidth_enabled = policy.Evaluate(
+      "くみ", "ＡＢＣ", /*allow_script_transition=*/true, "abc");
+  const ZenzOrthographyDecision fullwidth_disabled = policy.Evaluate(
+      "くみ", "ＡＢＣ", /*allow_script_transition=*/false, "abc");
+  EXPECT_FALSE(fullwidth_disabled.allow);
+  EXPECT_EQ(fullwidth_enabled.allow, fullwidth_disabled.allow);
+  EXPECT_EQ(fullwidth_enabled.reason, fullwidth_disabled.reason);
+}
+
+TEST(ZenzOrthographyPolicyTest, LicensesOnlyTheAsciiLettersOfAMixedCandidate) {
+  ZenzOrthographyPolicy policy;
+
+  // The permission licenses the grounded ASCII run ("GitHub" from "gittohabu")
+  // and nothing else; the Japanese part of the same candidate (くみ -> 組) is
+  // left to the historical comparison, which accepts it with the switch off as
+  // well.
+  EXPECT_TRUE(policy
+                  .Evaluate("くみとぎっとはぶ", "組とGitHub",
+                            /*allow_script_transition=*/true,
+                            "kumitogittohabu")
+                  .allow);
+
+  // The same mixed shape with an ASCII run the typed romaji does not ground is
+  // still rejected: the permission never widens beyond typed ASCII letters.
+  EXPECT_FALSE(policy
+                   .Evaluate("くみとぎっとはぶ", "組とZqxw",
+                             /*allow_script_transition=*/true,
+                             "kumitogittohabu")
+                   .allow);
+}
+
 }  // namespace
 }  // namespace mozc::session

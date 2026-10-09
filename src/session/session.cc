@@ -6526,10 +6526,12 @@ bool Session::MaybeApplyZenzFeedbackLiveCorrection(
         live_conversion_preedit_output_, live_conversion_key_,
         live_conversion_value_);
 
-    // Mixed English/Japanese input (the "Auto" switch): allow a pure-kana Mozc
-    // surface to adopt ASCII letters only when the user actually typed them as
-    // raw romaji.  The raw string is read only when the switch is on so the
-    // switch-off path is unaffected.
+    // Mixed English/Japanese input (the "Auto" switch): the extra freedom is
+    // limited to ASCII letters that the user actually typed as raw romaji, so
+    // only a candidate introducing such a letter (ぎっとばぶ -> GitHub) is
+    // affected; for every candidate without one the policy ignores the flag and
+    // keeps the switch-off orthography.  The raw string is read only when the
+    // switch is on so the switch-off path is unaffected.
     const std::string typed_raw_input =
         config.use_auto_language_switch() ? context_->composer().GetRawString()
                                           : std::string();
@@ -7314,9 +7316,11 @@ bool Session::ApplyZenzLiveCorrectionResult(
   adoption_input.protected_spans = pending_zenz_live_.protected_spans;
   adoption_input.baseline_segments = pending_zenz_live_.baseline_segments;
 
-  // Mixed English/Japanese input (the "Auto" switch): allow a pure-kana Mozc
-  // surface to adopt ASCII letters only when the user actually typed them as
-  // raw romaji.  The raw string is read only when the switch is on so the
+  // Mixed English/Japanese input (the "Auto" switch): the extra freedom is
+  // limited to ASCII letters that the user actually typed as raw romaji, so
+  // only a candidate introducing such a letter is affected; for every candidate
+  // without one the policy ignores the flag and keeps the switch-off
+  // orthography.  The raw string is read only when the switch is on so the
   // switch-off path is unaffected.
   const std::string typed_raw_input =
       config.use_auto_language_switch() ? context_->composer().GetRawString()

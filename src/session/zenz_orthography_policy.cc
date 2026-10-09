@@ -216,7 +216,11 @@ bool IsConsonantSkeletonSubsequenceOfTypedRaw(
 // work.
 bool IsTypedRawSurface(absl::string_view lowered_raw_input,
                        absl::string_view surface) {
-  if (lowered_raw_input.empty() || surface.empty()) {
+  // The mixed-input permission is scoped to ASCII letters: a surface that
+  // contains none is never eligible, whatever the flag or the typed raw romaji
+  // say, so it keeps the strict comparison's verdict.
+  if (lowered_raw_input.empty() || surface.empty() ||
+      !HasAsciiLetter(surface)) {
     return false;
   }
 
@@ -258,17 +262,24 @@ ZenzOrthographyDecision ZenzOrthographyPolicy::Evaluate(
       ExtractAlphabetRuns(candidate_value);
   const std::vector<std::string> baseline_runs = ExtractAlphabetRuns(mozc_value);
 
-  // The mixed-input permission is deliberately narrow.  It applies only when
-  // the Mozc surface carries no ASCII letter at all, so it can never remove,
-  // mutate, or duplicate a surface that normal Mozc already selected; it only
-  // lets a pure-kana segment surface letters the user actually typed.  An
-  // empty baseline run list also implies an empty baseline technical-token
-  // list, because every technical token contains an ASCII letter, which is
-  // itself an ALPHABET run.  An empty raw string fails closed.  With the flag
-  // false this is all inert and behaviour is byte-identical to before.
+  // The mixed-input permission is deliberately narrow, and it is scoped to
+  // ASCII letters.  It applies only when the candidate actually introduces an
+  // ASCII letter and the Mozc surface carries no ASCII letter at all, so it can
+  // never remove, mutate, or duplicate a surface that normal Mozc already
+  // selected; it only lets a pure-kana segment surface letters the user
+  // actually typed.  A candidate with no ASCII letter (an ordinary Japanese
+  // rewrite such as くみ -> 組, or a fullwidth "ＡＢＣ") therefore never reaches
+  // this permission and is decided by the historical comparison alone, i.e.
+  // exactly as it is with the flag off.  An empty baseline run list also
+  // implies an empty baseline technical-token list, because every technical
+  // token contains an ASCII letter, which is itself an ALPHABET run.  An empty
+  // raw string fails closed.  With the flag false this is all inert and
+  // behaviour is byte-identical to before.
+  const bool candidate_introduces_ascii_letter =
+      HasAsciiLetter(candidate_value);
   const bool script_transition_allowed =
-      allow_script_transition && baseline_runs.empty() &&
-      !typed_raw_input.empty();
+      allow_script_transition && candidate_introduces_ascii_letter &&
+      baseline_runs.empty() && !typed_raw_input.empty();
   const std::string lowered_raw_input =
       script_transition_allowed ? ToLowerAscii(typed_raw_input)
                                 : std::string();

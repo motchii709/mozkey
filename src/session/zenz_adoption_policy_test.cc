@@ -706,5 +706,33 @@ TEST(ZenzAdoptionPolicyTest,
             "orthographic_transition_missing_baseline_segments");
 }
 
+TEST(ZenzAdoptionPolicyTest,
+     KeepsJapaneseOnlyRewriteWhenScriptTransitionEnabled) {
+  ZenzAdoptionPolicy policy;
+
+  ZenzAdoptionInput enabled;
+  enabled.key = "くみ";
+  enabled.mozc_value = "くみ";
+  enabled.zenz_value = "組";
+  enabled.baseline_segments = {{"くみ", "くみ"}};
+  enabled.allow_script_transition = true;
+  enabled.typed_raw_input = "kumi";
+
+  ZenzAdoptionInput disabled = enabled;
+  disabled.allow_script_transition = false;
+
+  const ZenzAdoptionResult enabled_result = policy.Decide(enabled);
+  const ZenzAdoptionResult disabled_result = policy.Decide(disabled);
+
+  // 組 contains no ASCII letter, so the switch is inert here: the projection
+  // path takes the same decision, with the same value and reason, in both
+  // states.
+  EXPECT_EQ(enabled_result.action, ZenzAdoptionResult::Action::kAcceptAsIs);
+  EXPECT_EQ(enabled_result.value, "組");
+  EXPECT_EQ(enabled_result.action, disabled_result.action);
+  EXPECT_EQ(enabled_result.value, disabled_result.value);
+  EXPECT_EQ(enabled_result.reason, disabled_result.reason);
+}
+
 }  // namespace
 }  // namespace mozc::session
