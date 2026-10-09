@@ -455,6 +455,11 @@ class Composer final {
   // candidate (see UpdateEnglishWordCandidate).  The run is dropped as soon
   // as it can no longer become an entry of the curated English word list, so
   // an ordinary Japanese reading never reaches the replacement.
+  //
+  // Only EditErase() clears the run; Backspace(), Delete() and the cursor
+  // moves leave a stale one behind.  The replacement re-checks the raw suffix
+  // and the cursor, so a stale run can only make the feature miss a word, not
+  // rewrite text the user did not type.
   std::string english_word_candidate_;
 
   // Example:

@@ -1488,6 +1488,65 @@ TEST_F(ComposerTest, EnglishWordListKeepsWordsInMixedInput) {
   EXPECT_EQ(composer_->GetStringForPreedit(), "これGitHub");
 }
 
+// A listed word silently replaces what the user meant, because the match fires
+// the moment the spelling is complete: the kana the romaji table had already
+// produced is thrown away and the reading can no longer be converted.  "mac"
+// (まち, まっちゃ) and "ci" (し, しか) were removed from the list for that
+// reason, and "youtube" (ようつべ) was never safe either.
+TEST_F(ComposerTest, EnglishWordListDoesNotStealRomajiReadings) {
+  config_->set_preedit_method(Config::ROMAN);
+  config_->set_auto_switch_composition_mode(false);
+  config_->set_use_auto_language_switch(true);
+
+  table_->InitializeWithRequestAndConfig(*request_, *config_);
+
+  // The third keystroke used to match the listed "mac" and eat the pending
+  // "c", leaving "Macひ".
+  InsertRomajiKeys("machi", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "まち");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "まち");
+
+  composer_->Reset();
+  InsertRomajiKeys("maccha", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "まっちゃ");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "まっちゃ");
+
+  // The second keystroke used to match the listed "ci" and yield "CIか".
+  composer_->Reset();
+  InsertRomajiKeys("cika", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "しか");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "しか");
+
+  composer_->Reset();
+  InsertRomajiKeys("shika", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "しか");
+
+  composer_->Reset();
+  InsertRomajiKeys("youtube", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "ようつべ");
+}
+
+// The same mixed input under the default configuration.  The tests above turn
+// auto_switch_composition_mode off, but the real default is on, and with it
+// AutoSwitchMode() can redraw every chunk through Composition::SetTransliterator
+// (SetOutputMode), which would render the replacement chunk from its raw input
+// instead of its canonical spelling.  This test leaves the setting alone.
+TEST_F(ComposerTest, EnglishWordListKeepsMixedInputWithDefaultCompositionMode) {
+  config_->set_preedit_method(Config::ROMAN);
+  config_->set_use_auto_language_switch(true);
+  // config_->auto_switch_composition_mode() keeps its default, true.
+
+  table_->InitializeWithRequestAndConfig(*request_, *config_);
+
+  InsertRomajiKeys("githubnipushshitemoiikana", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubにpushしてもいいかな");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubにpushしてもいいかな");
+  EXPECT_EQ(composer_->GetRawString(), "githubnipushshitemoiikana");
+  // None of the AutoSwitchMode keywords matches this input, so the composition
+  // is never redrawn and the canonical spelling survives.
+  EXPECT_EQ(composer_->GetOutputMode(), transliteration::HIRAGANA);
+}
+
 // The curated list is opt-in: with use_auto_language_switch off (the default),
 // the list is not consulted at all.
 TEST_F(ComposerTest, EnglishWordListIsGatedByUseAutoLanguageSwitch) {

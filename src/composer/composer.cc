@@ -250,9 +250,22 @@ void RemoveExpandedCharsForModifier(absl::string_view asis,
 //   lowercase ASCII letters, matched exactly (and case-insensitively).  |word|
 //   is what the composition shows, so it carries the canonical casing.
 //   Keep the entries distinct -- an entry must not be a prefix of another
-//   entry, because the shorter one wins as soon as it is typed.  A word that
-//   is valid romaji on its own (e.g. "ci" is し) is no longer converted to
-//   kana while the setting is on, so avoid adding such words lightly.
+//   entry, because the shorter one wins as soon as it is typed.
+//
+// RULE: never list a word whose lowercase spelling is a romaji reading of
+//   Japanese.  The match fires as soon as the spelling is complete, so such an
+//   entry silently replaces what the user meant and the reading can no longer
+//   be converted at all: a listed "mac" turned "machi" into "Macひ" and ate
+//   the pending "c", so 町 was out of reach, and a listed "ci" turned "cika"
+//   into "CIか" instead of しか.  Check a candidate against
+//   src/data/preedit/romanji-hiragana.tsv before adding it -- that is why
+//   "youtube" is not listed, because the table reads it as ようつべ.
+//
+//   A spelling the table can consume but does not read as a word is fine, and
+//   the entries below that end in a character the table leaves pending
+//   ("github" leaves "b", "push" leaves "sh") or that read to something nobody
+//   types ("notion" is のちおん, "issue" is いっすえ) are kept deliberately:
+//   they take no reading away from the user.
 struct EnglishWordRule {
   absl::string_view romaji;
   absl::string_view word;
@@ -266,7 +279,6 @@ constexpr EnglishWordRule kEnglishWordRules[] = {
     {"docker", "Docker"},
     {"slack", "Slack"},
     {"discord", "Discord"},
-    {"youtube", "YouTube"},
     {"twitter", "Twitter"},
     {"vscode", "VSCode"},
     {"python", "Python"},
@@ -280,9 +292,7 @@ constexpr EnglishWordRule kEnglishWordRules[] = {
     {"chrome", "Chrome"},
     {"firefox", "Firefox"},
     {"windows", "Windows"},
-    {"mac", "Mac"},
     // Developer vocabulary.
-    {"ci", "CI"},
     {"pr", "PR"},
     {"push", "push"},
     {"pull", "pull"},
