@@ -42,6 +42,8 @@
 #include "absl/container/btree_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
@@ -234,6 +236,84 @@ void RemoveExpandedCharsForModifier(absl::string_view asis,
   for (auto [_, c] : kModifierRemovalMap.EqualSpan(trailing)) {
     expanded->erase(c);
   }
+}
+
+// Curated list of English words that keep their ASCII spelling -- with the
+// canonical casing of the |word| field -- while
+// config::Config::use_auto_language_switch is enabled.  The user types such a
+// word in romaji and the composition keeps it as an English word, while the
+// romaji around it is converted to Japanese as usual, so "githubni" becomes
+// "GitHubに".
+//
+// HOW TO ADD A WORD
+//   Add one {romaji, word} pair below.  |romaji| is what the user types: plain
+//   lowercase ASCII letters, matched exactly (and case-insensitively).  |word|
+//   is what the composition shows, so it carries the canonical casing.
+//   Keep the entries distinct -- an entry must not be a prefix of another
+//   entry, because the shorter one wins as soon as it is typed.  A word that
+//   is valid romaji on its own (e.g. "ci" is し) is no longer converted to
+//   kana while the setting is on, so avoid adding such words lightly.
+struct EnglishWordRule {
+  absl::string_view romaji;
+  absl::string_view word;
+};
+
+constexpr EnglishWordRule kEnglishWordRules[] = {
+    // Brand and service names.
+    {"github", "GitHub"},
+    {"gitlab", "GitLab"},
+    {"google", "Google"},
+    {"docker", "Docker"},
+    {"slack", "Slack"},
+    {"discord", "Discord"},
+    {"youtube", "YouTube"},
+    {"twitter", "Twitter"},
+    {"vscode", "VSCode"},
+    {"python", "Python"},
+    {"nodejs", "Node.js"},
+    {"aws", "AWS"},
+    {"npm", "npm"},
+    {"zoom", "Zoom"},
+    {"teams", "Teams"},
+    {"notion", "Notion"},
+    {"figma", "Figma"},
+    {"chrome", "Chrome"},
+    {"firefox", "Firefox"},
+    {"windows", "Windows"},
+    {"mac", "Mac"},
+    // Developer vocabulary.
+    {"ci", "CI"},
+    {"pr", "PR"},
+    {"push", "push"},
+    {"pull", "pull"},
+    {"commit", "commit"},
+    {"merge", "merge"},
+    {"issue", "issue"},
+    {"branch", "branch"},
+};
+
+// Returns true while |candidate| can still become one of the curated words,
+// including an exact match.
+bool IsEnglishWordPrefix(const absl::string_view candidate) {
+  if (candidate.empty()) {
+    return false;
+  }
+  for (const EnglishWordRule& rule : kEnglishWordRules) {
+    if (rule.romaji.starts_with(candidate)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Returns the rule whose |romaji| is exactly |candidate|, or nullptr.
+const EnglishWordRule* FindEnglishWord(const absl::string_view candidate) {
+  for (const EnglishWordRule& rule : kEnglishWordRules) {
+    if (rule.romaji == candidate) {
+      return &rule;
+    }
+  }
+  return nullptr;
 }
 
 constexpr size_t kMaxPreeditLength = 256;
@@ -763,6 +843,60 @@ bool Composer::ProcessCompositionInput(CompositionInput input) {
   return true;
 }
 
+void Composer::UpdateEnglishWordCandidate(const absl::string_view raw_input) {
+  // The curated English word path is opt-in.  When the setting is off (the
+  // default), nothing below runs, so the composer behaves exactly as before.
+  if (!config_->use_auto_language_switch() ||
+      config_->preedit_method() != config::Config::ROMAN) {
+    english_word_candidate_.clear();
+    return;
+  }
+
+  // Only a single plain ASCII letter extends the candidate.  Any other key
+  // (kana, digits, symbols, special keys) closes the run.
+  if (raw_input.size() != 1 || !absl::ascii_isalpha(raw_input.front())) {
+    english_word_candidate_.clear();
+    return;
+  }
+  english_word_candidate_.push_back(absl::ascii_tolower(raw_input.front()));
+
+  // A run that is not on its way to a curated word is an ordinary Japanese
+  // reading.  Forget it and leave the composition alone.
+  if (!IsEnglishWordPrefix(english_word_candidate_)) {
+    english_word_candidate_.clear();
+    return;
+  }
+
+  const EnglishWordRule* const rule = FindEnglishWord(english_word_candidate_);
+  if (rule == nullptr) {
+    // The run is still only a prefix of a curated word.
+    return;
+  }
+
+  // A whole word was typed.  Replace the kana the romaji table produced for
+  // it, but only when the composition really does end with the raw input that
+  // was tracked here: a deletion or a cursor move between two keystrokes
+  // would leave the tracked run stale, and the cursor must be at the end so
+  // that the rewrite cannot touch text the user typed earlier.
+  const std::string raw =
+      composition_.GetStringWithTransliterator(Transliterators::RAW_STRING);
+  const size_t length = english_word_candidate_.size();
+  english_word_candidate_.clear();
+  if (raw.size() < length || position_ != composition_.GetLength()) {
+    return;
+  }
+  const absl::string_view suffix =
+      absl::string_view(raw).substr(raw.size() - length);
+  if (!absl::EqualsIgnoreCase(suffix, rule->romaji)) {
+    return;
+  }
+
+  if (composition_.ReplaceTrailingRawWithConversion(suffix, rule->word)) {
+    // The replacement changes the number of characters the composition holds.
+    position_ = composition_.GetLength();
+  }
+}
+
 void Composer::InsertCharacter(std::string key) {
   CompositionInput input;
   input.InitFromRaw(std::move(key), is_new_input_);
@@ -908,6 +1042,11 @@ bool Composer::InsertCharacterKeyEvent(const commands::KeyEvent& key) {
     return false;
   }
 
+  // Keep what the user typed before |input| is consumed below: a word of the
+  // curated English word list is recognized from the raw input.
+  const std::string typed_raw(input.raw());
+  const bool is_asis = input.is_asis();
+
   if (!input.conversion().empty()) {
     if (input.is_asis()) {
       composition_.SetInputMode(Transliterators::CONVERSION_STRING);
@@ -930,6 +1069,16 @@ bool Composer::InsertCharacterKeyEvent(const commands::KeyEvent& key) {
 
   if (comeback_input_mode_ == input_mode_) {
     AutoSwitchMode();
+  }
+
+  // Called after AutoSwitchMode so that the canonical spelling is not
+  // re-romanized by a mode switch caused by the same key.
+  if (is_asis) {
+    // The client asked for the raw characters as they are; never reinterpret
+    // them as an English word.
+    english_word_candidate_.clear();
+  } else {
+    UpdateEnglishWordCandidate(typed_raw);
   }
   return true;
 }
@@ -956,6 +1105,7 @@ void Composer::DeleteRange(size_t pos, size_t length) {
 void Composer::EditErase() {
   composition_.Erase();
   position_ = 0;
+  english_word_candidate_.clear();
   SetInputMode(comeback_input_mode_);
 }
 

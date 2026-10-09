@@ -380,6 +380,16 @@ class Composer final {
 
   bool ProcessCompositionInput(CompositionInput input);
 
+  // Extends |english_word_candidate_| with the raw input the user just typed
+  // and, when the candidate is a complete word of the curated English word
+  // list, replaces the kana the romaji table produced for that word with the
+  // canonical spelling (e.g. "github" -> "GitHub").
+  //
+  // This path is opt-in and is a no-op unless
+  // config::Config::use_auto_language_switch is set, so the default behavior
+  // is unchanged.
+  void UpdateEnglishWordCandidate(absl::string_view raw_input);
+
   // Change input mode temporarily according to the current context and
   // the given input character.
   // This function have a bug when key has characters input with Preedit.
@@ -440,6 +450,12 @@ class Composer final {
   // "abc<left-cursor>d", when "a" or "d" is typed, this value should
   // be true.  When "b" or "c" is typed, the value should be false.
   bool is_new_input_;
+
+  // Lowercased run of the ASCII letters typed for the current English word
+  // candidate (see UpdateEnglishWordCandidate).  The run is dropped as soon
+  // as it can no longer become an entry of the curated English word list, so
+  // an ordinary Japanese reading never reaches the replacement.
+  std::string english_word_candidate_;
 
   // Example:
   //   {{"かん字", 0.99}, {"かlv字", 0.01}}

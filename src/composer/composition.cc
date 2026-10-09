@@ -54,6 +54,50 @@ namespace composer {
 
 void Composition::Erase() { chunks_.clear(); }
 
+bool Composition::ReplaceTrailingRawWithConversion(
+    const absl::string_view raw_suffix, const absl::string_view conversion) {
+  if (raw_suffix.empty() || chunks_.empty()) {
+    return false;
+  }
+
+  // Collect the fewest trailing chunks whose raw input covers |raw_suffix|.
+  size_t covered_raw_size = 0;
+  auto first = std::prev(chunks_.end());
+  for (;;) {
+    covered_raw_size += first->raw().size();
+    if (covered_raw_size >= raw_suffix.size() || first == chunks_.begin()) {
+      break;
+    }
+    --first;
+  }
+
+  // The raw input of the collected chunks must be exactly |raw_suffix|: when
+  // it is longer, the first character of |raw_suffix| is only a part of a
+  // chunk that also holds characters before it.  Rewriting then would drop a
+  // conversion that belongs to those characters, so give up instead.
+  if (covered_raw_size != raw_suffix.size()) {
+    return false;
+  }
+  std::string covered_raw;
+  for (auto it = first; it != chunks_.end(); ++it) {
+    absl::StrAppend(&covered_raw, it->raw());
+  }
+  if (absl::string_view(covered_raw) != raw_suffix) {
+    return false;
+  }
+
+  // The replacement keeps the raw input and shows the given conversion only.
+  // Transliterators::CONVERSION_STRING displays the conversion verbatim, so
+  // the canonical spelling of the word survives; a kana transliterator would
+  // run the user's character form rules over it.
+  CharChunk replacement(Transliterators::CONVERSION_STRING, table_);
+  replacement.set_raw(std::string(raw_suffix));
+  replacement.set_conversion(std::string(conversion));
+  chunks_.insert(first, std::move(replacement));
+  chunks_.erase(first, chunks_.end());
+  return true;
+}
+
 size_t Composition::InsertAt(size_t pos, std::string input) {
   CompositionInput composition_input;
   composition_input.set_raw(std::move(input));

@@ -90,6 +90,14 @@ bool InsertKeyWithMode(const absl::string_view key_string,
   return composer->InsertCharacterKeyEvent(key);
 }
 
+// Types every character of |romaji| as its own key event, the way a user
+// types a roman reading.
+void InsertRomajiKeys(const absl::string_view romaji, Composer* composer) {
+  for (const char c : romaji) {
+    InsertKey(absl::string_view(&c, 1), composer);
+  }
+}
+
 void ExpectSameComposer(const Composer& lhs, const Composer& rhs) {
   EXPECT_EQ(lhs.GetCursor(), rhs.GetCursor());
   EXPECT_EQ(lhs.is_new_input(), rhs.is_new_input());
@@ -1437,6 +1445,103 @@ TEST_F(ComposerTest, AutoSwitchCompositionModeKeepsKanaWhenLanguageSwitchIsOn) {
 
   EXPECT_EQ(composer_->GetStringForPreedit(), "http");
   EXPECT_EQ(composer_->GetInputMode(), transliteration::HALF_ASCII);
+}
+
+// The curated English word list keeps a known English word in the composition
+// with its canonical spelling while config::Config::use_auto_language_switch
+// is on.  The romaji around the word is still converted to kana as usual.
+TEST_F(ComposerTest, EnglishWordListKeepsCanonicalSpelling) {
+  config_->set_preedit_method(Config::ROMAN);
+  config_->set_auto_switch_composition_mode(false);
+  config_->set_use_auto_language_switch(true);
+
+  table_->InitializeWithRequestAndConfig(*request_, *config_);
+
+  InsertRomajiKeys("github", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHub");
+
+  InsertRomajiKeys("ni", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubに");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubに");
+  // The raw input is preserved, so the reading for the converter is derived
+  // from the same characters the user typed.
+  EXPECT_EQ(composer_->GetRawString(), "githubni");
+  EXPECT_EQ(composer_->GetCursor(), composer_->GetLength());
+}
+
+// The mixed English/Japanese input this feature exists for: the listed words
+// keep their spelling in the middle of a composition too, not only at its
+// beginning, and the Japanese around them is unchanged.
+TEST_F(ComposerTest, EnglishWordListKeepsWordsInMixedInput) {
+  config_->set_preedit_method(Config::ROMAN);
+  config_->set_auto_switch_composition_mode(false);
+  config_->set_use_auto_language_switch(true);
+
+  table_->InitializeWithRequestAndConfig(*request_, *config_);
+
+  InsertRomajiKeys("githubnipushshitemoiikana", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubにpushしてもいいかな");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubにpushしてもいいかな");
+
+  composer_->Reset();
+  InsertRomajiKeys("koregithub", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "これGitHub");
+}
+
+// The curated list is opt-in: with use_auto_language_switch off (the default),
+// the list is not consulted at all.
+TEST_F(ComposerTest, EnglishWordListIsGatedByUseAutoLanguageSwitch) {
+  config_->set_preedit_method(Config::ROMAN);
+  config_->set_auto_switch_composition_mode(false);
+  // config_->use_auto_language_switch() keeps its default, false.
+
+  table_->InitializeWithRequestAndConfig(*request_, *config_);
+
+  InsertRomajiKeys("github", composer_.get());
+  EXPECT_NE(composer_->GetStringForPreedit(), "GitHub");
+
+  config_->set_use_auto_language_switch(true);
+  auto table_on = std::make_shared<Table>();
+  table_on->InitializeWithRequestAndConfig(*request_, *config_);
+  Composer composer_on(table_on, *request_, *config_);
+  InsertRomajiKeys("github", &composer_on);
+  EXPECT_EQ(composer_on.GetStringForPreedit(), "GitHub");
+}
+
+// A word that is not in the curated list must behave exactly as before: the
+// replacement is reached only when the tracked run is exactly one of the
+// listed words, so an ordinary Japanese reading is never touched.
+TEST_F(ComposerTest, EnglishWordListLeavesUnlistedWordsUnchanged) {
+  Config config_off;
+  config_off.set_preedit_method(Config::ROMAN);
+  config_off.set_auto_switch_composition_mode(false);
+  auto table_off = std::make_shared<Table>();
+  table_off->InitializeWithRequestAndConfig(*request_, config_off);
+  Composer composer_off(table_off, *request_, config_off);
+
+  Config config_on = config_off;
+  config_on.set_use_auto_language_switch(true);
+  auto table_on = std::make_shared<Table>();
+  table_on->InitializeWithRequestAndConfig(*request_, config_on);
+  Composer composer_on(table_on, *request_, config_on);
+
+  // Each entry is either a plain Japanese reading or a reading that starts
+  // like a listed word but never becomes one ("pu" -> "pusu").
+  for (const absl::string_view romaji :
+       {"konnnichiha", "pura", "giri", "nomu", "terebi", "mada", "pusu",
+        "noto", "shitemoiikana"}) {
+    composer_off.Reset();
+    composer_on.Reset();
+    InsertRomajiKeys(romaji, &composer_off);
+    InsertRomajiKeys(romaji, &composer_on);
+    const std::string label(romaji);
+    EXPECT_EQ(composer_on.GetStringForPreedit(),
+              composer_off.GetStringForPreedit())
+        << label;
+    EXPECT_EQ(composer_on.GetQueryForConversion(),
+              composer_off.GetQueryForConversion())
+        << label;
+  }
 }
 
 TEST_F(ComposerTest, AutoSwitchCompositionModeDisabled) {

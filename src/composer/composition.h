@@ -41,6 +41,7 @@
 #include "absl/log/check.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
 #include "composer/char_chunk.h"
 #include "composer/composition_input.h"
 #include "composer/table.h"
@@ -114,6 +115,20 @@ class Composition final {
 
   // Clear all chunks.
   void Erase();
+
+  // Replaces the trailing chunks whose raw input spells exactly |raw_suffix|
+  // with a single chunk that displays |conversion|.
+  //
+  // This is used to keep a word from the curated English word list in the
+  // composition as its canonical spelling instead of the kana the romaji table
+  // produced for it (see Composer::UpdateEnglishWordCandidate).
+  //
+  // Returns false and leaves the composition untouched unless the trailing
+  // chunks cover |raw_suffix| exactly.  In particular, a suffix whose first
+  // character is inside an existing chunk is never rewritten, because the
+  // characters before it already own a conversion that must be kept.
+  bool ReplaceTrailingRawWithConversion(absl::string_view raw_suffix,
+                                        absl::string_view conversion);
 
   // Get the position on mode_to from position_from on mode_from.
   size_t ConvertPosition(

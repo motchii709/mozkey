@@ -157,6 +157,29 @@ TEST_F(CompositionTest, GetChunkLength) {
   }
 }
 
+TEST_F(CompositionTest, ReplaceTrailingRawWithConversion) {
+  // [ぎ|gi][てゅ|thu][b|b]: the raw input of the three chunks spells "github".
+  AppendChunk("ぎ", "", "gi", composition_);
+  AppendChunk("てゅ", "", "thu", composition_);
+  AppendChunk("", "b", "b", composition_);
+  EXPECT_EQ(composition_.GetString(), "ぎてゅb");
+  EXPECT_EQ(GetRawString(composition_), "github");
+
+  EXPECT_TRUE(
+      composition_.ReplaceTrailingRawWithConversion("github", "GitHub"));
+  EXPECT_EQ(composition_.GetString(), "GitHub");
+  EXPECT_EQ(GetRawString(composition_), "github");
+  EXPECT_EQ(composition_.GetLength(), 6u);
+
+  // The raw input must start at a chunk boundary.  "thub" starts inside the
+  // "thu" chunk, so the composition is left alone.
+  EXPECT_FALSE(composition_.ReplaceTrailingRawWithConversion("thub", "thub"));
+  // A suffix that is not the trailing raw input at all is rejected too.
+  EXPECT_FALSE(
+      composition_.ReplaceTrailingRawWithConversion("github!", "github!"));
+  EXPECT_EQ(composition_.GetString(), "GitHub");
+}
+
 namespace {
 bool TestGetChunkAt(Composition& comp,
                     Transliterators::Transliterator transliterator,
