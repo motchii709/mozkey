@@ -1001,29 +1001,37 @@ TEST_F(DictionaryPredictionAggregatorTest,
   config_->set_use_dictionary_suggest(true);
   config_->set_use_realtime_conversion(false);
 
-  // Only the English entries of "conv" matter here; all the other lookups come
-  // from the kana query, which this test does not model.  The second
+  // Only the English entries of "amazon" matter here; all the other lookups
+  // come from the kana query, which this test does not model.  The second
   // expectation is registered last so that it takes precedence over the first
-  // one for "conv".
+  // one for "amazon".
   MockDictionary* mock = data_and_aggregator->mutable_dictionary();
   EXPECT_CALL(*mock, LookupPredictive(_, _, _))
       .WillRepeatedly(InvokeCallbackWithKeyValues{});
-  EXPECT_CALL(*mock, LookupPredictive(StrEq("conv"), _, _))
+  EXPECT_CALL(*mock, LookupPredictive(StrEq("amazon"), _, _))
       .WillRepeatedly(InvokeCallbackWithKeyValues{{
-          {"converge", "converge"},
-          {"converged", "converged"},
-          {"convergent", "convergent"},
+          {"amazon", "amazon"},
       }});
 
-  // Type "conv" in romaji.  The composer stays in the Japanese input mode, so
-  // this is not a Latin input mode request.
+  // Type "amazon" in romaji.  The composer stays in the Japanese input mode, so
+  // this is not a Latin input mode request.  The kana query is long enough to
+  // clear the minimum key length even after the trailing pending romaji
+  // sequence is trimmed from it.  (A shorter input such as "conv", whose kana
+  // query is only two characters, stays below that minimum by design, so no
+  // English candidate is offered there.)
   table_->LoadFromFile("system://romanji-hiragana.tsv");
   composer_->Reset();
   composer_->SetInputMode(transliteration::HIRAGANA);
-  InsertInputSequence("conv", composer_.get());
-  ASSERT_EQ(composer_->GetRawString(), "conv");
+  InsertInputSequence("amazon", composer_.get());
+  ASSERT_EQ(composer_->GetRawString(), "amazon");
 
   const std::string kana_query = composer_->GetQueryForPrediction();
+  // The implementation gates the English lookup on the length of this key
+  // against the minimum key length of the dictionary prediction, which is
+  // three on the desktop.  (The kana query of a romaji input that ends in an
+  // incomplete sequence is one character shorter, because the pending
+  // character is trimmed, so "conv" only reaches two characters.)
+  ASSERT_GE(Util::CharsLen(kana_query), 3);
 
   // The flag is off by default, so the request stays Japanese only.
   ASSERT_FALSE(config_->use_auto_language_switch());
@@ -1044,9 +1052,7 @@ TEST_F(DictionaryPredictionAggregatorTest,
     const std::vector<Result> results =
         aggregator.AggregateResultsForTesting(convreq);
     EXPECT_TRUE(GetMergedTypes(results) & ENGLISH);
-    EXPECT_TRUE(FindResultByValue(results, "converge"));
-    EXPECT_TRUE(FindResultByValue(results, "converged"));
-    EXPECT_TRUE(FindResultByValue(results, "convergent"));
+    EXPECT_TRUE(FindResultByValue(results, "amazon"));
     for (const Result& result : results) {
       // Ordinary dictionary candidates: nothing is promoted to the top, so a
       // kana reading is never replaced by an English word.
