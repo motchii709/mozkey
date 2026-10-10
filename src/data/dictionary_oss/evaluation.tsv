@@ -628,7 +628,7 @@ OK:	ぱんかう	パン買う	Prediction Expected 2	パン買う	3.34.6239
 OK:	やさいいためる	野菜炒める	Prediction Expected 2	野菜炒める	3.34.6239
 OK:	とりにくきる	鶏肉切る	Prediction Expected 2	鶏肉切る	3.34.6239
 FAILED:	ぼたんとめる	ボタン止める	Prediction Expected 2	ボタン留める	3.34.6239
-FAILED:	usbさす	usb指す	Prediction Expected 2	USB挿す	3.34.6239
+FAILED:	usbさす	USB指す	Prediction Expected 2	USB挿す	3.33.6154
 OK:	ぼたんおす	ボタンオス	Prediction Expected 2	ボタン押す	3.34.6239
 OK:	どああける	ドア開ける	Prediction Expected 2	ドア開ける	3.34.6239
 OK:	といれいく	トイレ行く	Prediction Expected 2	トイレ行く	3.34.6239
