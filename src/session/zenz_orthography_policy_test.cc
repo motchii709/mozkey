@@ -145,6 +145,25 @@ TEST(ZenzOrthographyPolicyTest,
 }
 
 TEST(ZenzOrthographyPolicyTest,
+     RejectsWidenedAsciiSurfaceWhenScriptTransitionEnabled) {
+  ZenzOrthographyPolicy policy;
+
+  // Full-width Latin is ALPHABET (base/util.cc, Util::GetScriptType), so "ｐｕｓｈ"
+  // is an alphabetic run of its own.  The typed ASCII romaji cannot ground it --
+  // its bytes are not a substring of the keys and it has no ASCII consonant
+  // skeleton -- so the widened surface is refused even though every letter of it
+  // was typed.  The reported input committed "GitHubにｐｕｓｈしてほしいかな", and
+  // the half-width counterpart is the surface accepted just above.
+  const ZenzOrthographyDecision decision =
+      policy.Evaluate("ぎっとはぶにぷっしゅしてほしいかな",
+                      "GitHubにｐｕｓｈしてほしいかな",
+                      /*allow_script_transition=*/true,
+                      "githubnipushsitehosiikana");
+  EXPECT_FALSE(decision.allow);
+  EXPECT_EQ(decision.reason, "alphabetic_surface_changed");
+}
+
+TEST(ZenzOrthographyPolicyTest,
      DoesNotWeakenLatinSurfaceGuardsWhenScriptTransitionEnabled) {
   ZenzOrthographyPolicy policy;
 
