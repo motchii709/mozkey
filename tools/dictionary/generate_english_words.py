@@ -1,22 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Generate src/data/dictionary_manual/english_words.tsv.
+"""Generate src/data/dictionary_oss/english_words.txt.
 
 WHAT THIS FILE IS
 -----------------
-The TSV produced here adds entries to the main dictionary so that an English
-word typed in romaji can be converted to its canonical half-width spelling.
-Each line is "key<TAB>value<TAB>pos", the same format as places.tsv and
-words.tsv in the same directory:
+The file produced here makes an English word typed in romaji offer its canonical
+half-width spelling as a *prediction candidate* ("github" -> "GitHub", "nodejs"
+-> "Node.js").  It is listed in the `dictionary_srcs` of the OSS dataset, so it
+is read by TextDictionaryLoader and NOT by gen_aux_dictionary.  Each line has
+the six-column form that loader understands
+(src/dictionary/text_dictionary_loader.cc, ParseTSV):
+
+    key<TAB>0<TAB>0<TAB>8000<TAB>value<TAB>ENGLISH
 
     key    lowercase ASCII spelling that the user types ("github")
+    lid    written as 0; the ENGLISH label overwrites it
+    rid    written as 0; the ENGLISH label overwrites it
+    cost   8000, the cost of the ASCII entries already shipped in domain.txt
     value  canonical spelling that is shown and committed ("GitHub")
-    pos    a POS alias understood by dictionary/gen_aux_dictionary.py
+    label  ENGLISH, which rewrites lid/rid to the isolated word POS
+           (特殊,短縮よみ, see src/data/rules/special_pos.def)
 
-Unlike the Japanese entries in the sibling TSVs, the key is not a kana reading:
-it is the ASCII spelling the user types.  The value therefore differs from the
-key only by case and punctuation, and the script asserts exactly that for every
-line it writes.
+The loader understands neither comments nor blank lines, so the file holds
+neither, and the key is not a kana reading: it is the ASCII spelling the user
+types.  The value therefore differs from the key only by case and punctuation,
+and the script asserts exactly that for every line it writes.
+
+WHY THIS FORMAT IS THE SAFE ONE
+-------------------------------
+The isolated word POS adds a large per-transition cost on top of cost 8000, so
+these candidates sort below ordinary kana predictions and never carry
+Attribute::REALTIME_TOP.  That is what makes it safe to list a spelling whose
+romaji reading is also a word of the Japanese dictionary ("code" reads as こで):
+the kana conversion stays available and stays ranked first.  The 固有名詞 route
+this file replaced (src/data/dictionary_manual/english_words.tsv) did the
+opposite -- gen_aux_dictionary rewrites the cost to the MEDIAN cost of the given
+POS, which for 固有名詞 is low enough for an English entry to rank beside kana
+and change what the user gets by default.  The ranking claim itself is a runtime
+property; this script only fixes the data, so it is not asserted here.
 
 SOURCE AND LICENSE
 ------------------
@@ -38,7 +59,7 @@ dwyl/english-words, data file words_alpha.txt.
 The file is not committed to this repository; it is downloaded on demand and
 verified against the sha256 above.  Pass --input to use a local copy.
 
-SIZE BOUND (--min-len / --max-len, default 3..5)
+SIZE BOUND (--min-len / --max-len, default 3..6)
 ------------------------------------------------
 words_alpha.txt holds 370,105 words, which is far more than an inline English
 word list should add to the dictionary.  The bound here is a length window,
@@ -49,38 +70,42 @@ src/data/dictionary_koyasi/README.md).
 
 Word length is the license-free proxy for frequency: running English text is
 dominated by short words (the commonest tokens are all 3-5 letters), so words of
-3 to 5 letters are the ones a user is most likely to type inside Japanese text,
-while the long tail of 6+ letter words is mostly rare vocabulary.  The window
-3..5 yields ~19.8k entries, inside the intended 10k-30k band; the band is
-enforced by --expected-min/--expected-max, which fail the run when the result
-leaves it.  Widening to --max-len 6 yields ~44.5k entries and would need a
-frequency source to trim, which is why it is not the default.
+3 to 6 letters are the ones a user is most likely to type inside Japanese text,
+while the long tail of 7+ letter words is mostly rare vocabulary.  The window
+3..6 with the strict romaji filter on yields ~44.5k entries; with the default
+--romaji-filter none (see below) it yields ~55.2k, which is the committed
+file.  The band is enforced by --expected-min/--expected-max (40000..70000 by
+default), which fail the run when the result leaves it.  Widening to
+--max-len 7 would need a frequency source to trim.
 
-COLLISION FILTER (critical)
----------------------------
-A word must not be listed when its lowercase spelling is a romaji reading of
-Japanese, because the English-word match fires as soon as the spelling is
-complete and would then take that reading away from the user for good.  See the
-"RULE: never list a word whose lowercase spelling is a romaji reading" comment
-in src/composer/composer.cc.
+COLLISION FILTER (--romaji-filter, default none)
+------------------------------------------------
+A spelling whose lowercase form is a romaji reading of Japanese is a hazard on
+the 固有名詞 route, because the English match fires as soon as the spelling is
+complete and would then take that reading away from the user for good.  That is
+why src/composer/composer.cc carries a curated word list with the rule "never
+list a word whose lowercase spelling is a romaji reading".
 
-The filter is built from this repository's own romaji table,
-src/data/preedit/romanji-hiragana.tsv: a word is dropped when the table can
-consume it completely, that is when the whole spelling can be segmented into
-table entries that leave no pending remainder ("youtube" is yo+u+tu+be, so it
-reads as "yotsube" and is dropped).  Entries with a third column ("qq", "tch",
-"www", ...) leave a pending character and therefore never complete a spelling on
-their own.  On top of the table, the deny list below is dropped unconditionally;
-it holds the three examples the composer comment names, and "mac" is the one
-that only the deny list catches, because the table consumes "ma" and leaves "c"
+On this route the hazard is gone: an entry here is a prediction candidate that
+sorts below kana, so the kana reading still wins.  The default is therefore
+--romaji-filter none, which keeps the colliding spellings ("code" -> こで,
+"name" -> なめ, "line" -> りね) as candidates and is what produces the ~55.2k
+entries.  --romaji-filter full restores the mechanical table filter and drops
+them; it is kept so the cost of the default can be measured and reproduced.
+Both modes always drop the deny list below, because those three spellings are
+observed failures rather than a property of the romaji table.
+
+The mechanical filter is built from this repository's own romaji table,
+src/data/preedit/romanji-hiragana.tsv: under --romaji-filter full a word is
+dropped when the table can consume it completely, that is when the whole
+spelling can be segmented into table entries that leave no pending remainder
+("youtube" is yo+u+tu+be, so it reads as "yotsube" and is dropped).  Entries
+with a third column ("qq", "tch", "www", ...) leave a pending character and
+therefore never complete a spelling on their own.  "mac" is the one spelling
+only the deny list catches, because the table consumes "ma" and leaves "c"
 pending while the match still fires at "mac" and eats the "c" of "machi".
-
-Words that the table consumes but that nobody types as a reading are dropped as
-well, because the rule is mechanical: "name" is na+me, "line" is li+ne and
-"code" is co+de, so all three go.  That costs a few common words on purpose.
---romaji-filter none disables the table half of the filter (the deny list
-always applies) so the cost can be measured and reproduced, and every dropped
-word is written to dist/dictionary/english_words-dropped.txt for inspection.
+Every dropped word is written to dist/dictionary/english_words-dropped.txt for
+inspection.
 
 BRAND SECTION
 -------------
@@ -93,11 +118,12 @@ inputs hold the same key the brand entry wins, the script asserts that the
 generated value was really replaced, and the number of such overrides is
 printed.
 
-A brand name whose key the romaji table can consume completely cannot be listed
-at all and is reported as explicitly excluded instead of silently dropped.  That
-is what happens to "Java" (じゃゔぁ), "Ubuntu" (うぶんつ), "Vue" (ゔぇ), "Go"
-(ご), "API" (あぴ), "Wi-Fi" (うぃふぃ), "NaN" (なん) and 17 more; the full list
-is printed by every run.
+Under --romaji-filter full a brand name whose key the romaji table can consume
+completely cannot be listed at all and is reported as explicitly excluded
+instead of silently dropped -- "Java" (じゃゔぁ), "Ubuntu" (うぶんつ), "Vue" (ゔぇ),
+"Go" (ご), "API" (あぴ), "Wi-Fi" (うぃふぃ), "NaN" (なん) and 17 more.  The default
+--romaji-filter none keeps them, so the committed file holds java, go, api, vue,
+ubuntu, wifi and nan.
 
 A brand entry may also share its key with an ordinary English word, because the
 short spellings of several names are plain words: "rest", "rust", "ruby",
@@ -108,8 +134,18 @@ form.  That is the intended priority, and the override list is printed on every
 run so the trade can be re-checked; drop a name from BRAND_WORDS to hand the
 spelling back to the ordinary word.
 
+SOURCE AND LICENSE FOR THE GENERATED FILE
+-----------------------------------------
+The provenance (Unlicense public-domain dedication, the Moby Word Lists lineage,
+the pinned sha256 and the retrieval date) is recorded next to the generated
+file, in src/data/dictionary_oss/README.md, and in the external source table of
+src/data/dictionary_koyasi/README.md.  Keep those in sync when the source
+changes.
+
 HOW TO REGENERATE
 -----------------
+The generated file is committed, so a plain run has to reproduce it exactly:
+
     python tools/dictionary/generate_english_words.py
 
 Verify that the committed file is still exactly what this script produces:
@@ -135,21 +171,23 @@ SOURCE_URL = (
 SOURCE_SHA256 = "3ed0c94610d8bcf7c11bbb49c56aa49c7234d32b66824df91f554169e572da48"
 SOURCE_RETRIEVED = "2026-10-10"
 
-DEFAULT_OUTPUT = REPO_ROOT / "src/data/dictionary_manual/english_words.tsv"
+DEFAULT_OUTPUT = REPO_ROOT / "src/data/dictionary_oss/english_words.txt"
 DEFAULT_ROMAJI_TSV = REPO_ROOT / "src/data/preedit/romanji-hiragana.tsv"
 DEFAULT_DROPPED_OUT = REPO_ROOT / "dist/dictionary/english_words-dropped.txt"
 
-# POS alias resolved by dictionary/gen_aux_dictionary.py.  Bare "固有名詞" is
-# the same alias words.tsv uses for proper nouns; it maps to
-# "名詞,固有名詞,一般,*,*,*,*" in data/dictionary_oss/id.def.
-POS = "固有名詞"
+# Columns 2..4 and the label of every line.  lid/rid are placeholders: the
+# ENGLISH label makes TextDictionaryLoader rewrite both to the isolated word
+# POS (特殊,短縮よみ).  cost 8000 is the cost of the ASCII entries already
+# shipped in dictionary_oss/domain.txt.
+LID = 0
+RID = 0
+COST = 8000
+LABEL = "ENGLISH"
 
 # Documented in src/composer/composer.cc.  Applied unconditionally, also when
 # --romaji-filter none is given, because these are known-observed failures
 # rather than a property of the romaji table.
 ROMAJI_DENY_LIST = ("mac", "ci", "youtube")
-
-HEADER = "# key\tvalue\tpos"
 
 # Hand-curated brand and technical names.  The key is derived from the value by
 # lowercasing and dropping everything that is not a-z0-9, so "Node.js" is typed
@@ -491,29 +529,57 @@ def merge_entries(
 
 
 def render(entries: list[tuple[str, str]]) -> str:
-    lines = [HEADER]
+    """Render the six-column loader format, with no header and no comments."""
+    lines = []
     for key, value in entries:
-        lines.append("\t".join((key, value, POS)))
-    return "\n".join(lines) + "\n"
+        lines.append(
+            "\t".join((key, str(LID), str(RID), str(COST), value, LABEL))
+        )
+    return "".join(line + "\n" for line in lines)
 
 
 def validate(entries: list[tuple[str, str]]) -> None:
     keys = [key for key, _ in entries]
     if len(set(keys)) != len(keys):
         raise SystemExit("ERROR: duplicate keys in the merged list")
-    if keys != sorted(keys):
-        raise SystemExit("ERROR: merged list is not sorted by key")
+    if keys != sorted(keys, key=lambda key: key.encode("ascii")):
+        raise SystemExit("ERROR: merged list is not byte-sorted by key")
     for key, value in entries:
         if not KEY_CHARS.fullmatch(key):
             raise SystemExit("ERROR: key %r is not lowercase ASCII" % key)
         if not value:
             raise SystemExit("ERROR: empty value for key %r" % key)
-        if "\t" in value or "\n" in value:
+        if "\t" in value or "\n" in value or "\r" in value:
             raise SystemExit("ERROR: value for key %r holds a tab or newline" % key)
         if brand_key(value) != key:
             raise SystemExit(
                 "ERROR: key %r and value %r differ by more than case/punctuation"
                 % (key, value)
+            )
+
+
+def validate_rendered(text: str) -> None:
+    """The loader skips empty columns and needs five of them plus the label."""
+    lines = text.split("\n")
+    if lines[-1] != "":
+        raise SystemExit("ERROR: rendered text does not end with a newline")
+    lines = lines[:-1]
+    if not lines:
+        raise SystemExit("ERROR: rendered text is empty")
+    for line in lines:
+        columns = line.split("\t")
+        if len(columns) != 6:
+            raise SystemExit(
+                "ERROR: %r holds %d columns, not 6" % (line, len(columns))
+            )
+        expected = (str(LID), str(RID), str(COST))
+        if tuple(columns[1:4]) != expected:
+            raise SystemExit(
+                "ERROR: %r does not carry the pinned lid/rid/cost" % line
+            )
+        if columns[5] != LABEL:
+            raise SystemExit(
+                "ERROR: %r does not carry the %s label" % (line, LABEL)
             )
 
 
@@ -612,14 +678,15 @@ def main() -> int:
     parser.add_argument(
         "--romaji-filter",
         choices=("full", "none"),
-        default="full",
+        default="none",
         help="'full' drops every spelling the romaji table consumes completely;"
-        " 'none' drops only --romaji-deny-list (measurement only)",
+        " 'none' (default) drops only --romaji-deny-list, because the ENGLISH"
+        " label already ranks these candidates below kana",
     )
     parser.add_argument("--min-len", type=int, default=3)
-    parser.add_argument("--max-len", type=int, default=5)
-    parser.add_argument("--expected-min", type=int, default=10000)
-    parser.add_argument("--expected-max", type=int, default=30000)
+    parser.add_argument("--max-len", type=int, default=6)
+    parser.add_argument("--expected-min", type=int, default=40000)
+    parser.add_argument("--expected-max", type=int, default=70000)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--dropped-out", type=Path, default=DEFAULT_DROPPED_OUT)
     parser.add_argument(
@@ -666,6 +733,7 @@ def main() -> int:
     entries, overrides = merge_entries(generated, brands)
     validate(entries)
     text = render(entries)
+    validate_rendered(text)
 
     if args.check:
         existing = (
