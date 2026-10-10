@@ -1589,6 +1589,40 @@ TEST_F(ComposerTest, EnglishWordListCommitsHalfWidthAscii) {
   EXPECT_EQ(composer_->GetStringForSubmission(), "GitHubにPushしてほしいかな");
 }
 
+// A width-mode change after the word was inserted.  AutoSwitchMode() redraws
+// every existing chunk through Composition::SetTransliterator (SetOutputMode),
+// which used to render the replacement chunk from its raw input: the curated
+// word came out full-width ("ｐｕｓｈ") instead of half-width ("push").  With the
+// replacement marked NO_TRANSLITERATION the canonical spelling survives the
+// switch; "push" carries the canonical casing "Push".
+TEST_F(ComposerTest, EnglishWordSurvivesFullAsciiOutputMode) {
+  config_->set_preedit_method(Config::ROMAN);
+  config_->set_auto_switch_composition_mode(false);
+  config_->set_use_auto_language_switch(true);
+
+  table_->InitializeWithRequestAndConfig(*request_, *config_);
+
+  InsertRomajiKeys("push", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "Push");
+
+  composer_->SetOutputMode(transliteration::FULL_ASCII);
+  EXPECT_EQ(composer_->GetStringForPreedit(), "Push");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "Push");
+  EXPECT_EQ(composer_->GetRawString(), "push");
+
+  // The same switch in the middle of a longer composition: the curated word
+  // stays half-width while the chunks around it are still redrawn.
+  composer_->Reset();
+  InsertRomajiKeys("githubnipush", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubにPush");
+
+  composer_->SetOutputMode(transliteration::FULL_ASCII);
+  const std::string preedit = composer_->GetStringForPreedit();
+  EXPECT_NE(preedit.find("Push"), std::string::npos) << preedit;
+  EXPECT_EQ(preedit.find("ｐｕｓｈ"), std::string::npos) << preedit;
+  EXPECT_EQ(preedit.find("Ｐｕｓｈ"), std::string::npos) << preedit;
+}
+
 // The curated list is opt-in: with use_auto_language_switch off (the default),
 // the list is not consulted at all.
 TEST_F(ComposerTest, EnglishWordListIsGatedByUseAutoLanguageSwitch) {

@@ -90,7 +90,12 @@ bool Composition::ReplaceTrailingRawWithConversion(
   // Transliterators::CONVERSION_STRING displays the conversion verbatim, so
   // the canonical spelling of the word survives; a kana transliterator would
   // run the user's character form rules over it.
+  // NO_TRANSLITERATION keeps that spelling through a later width-mode change
+  // (Composer::SetOutputMode rewrites the transliterator of every chunk):
+  // LOCAL, HALF_ASCII and FULL_ASCII then all resolve to CONVERSION_STRING
+  // instead of rendering the chunk from its raw input.
   CharChunk replacement(Transliterators::CONVERSION_STRING, table_);
+  replacement.set_attributes(NO_TRANSLITERATION);
   replacement.set_raw(std::string(raw_suffix));
   replacement.set_conversion(std::string(conversion));
   chunks_.insert(first, std::move(replacement));

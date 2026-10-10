@@ -180,6 +180,28 @@ TEST_F(CompositionTest, ReplaceTrailingRawWithConversion) {
   EXPECT_EQ(composition_.GetString(), "GitHub");
 }
 
+TEST_F(CompositionTest,
+       ReplaceTrailingRawWithConversionKeepsCanonicalSpellingUnderModeChange) {
+  // [ぎ|gi][てゅ|thu][b|b]: the raw input of the three chunks spells "github".
+  AppendChunk("ぎ", "", "gi", composition_);
+  AppendChunk("てゅ", "", "thu", composition_);
+  AppendChunk("", "b", "b", composition_);
+  ASSERT_TRUE(
+      composition_.ReplaceTrailingRawWithConversion("github", "GitHub"));
+  EXPECT_EQ(composition_.GetString(), "GitHub");
+
+  // A later width-mode change redraws every existing chunk through
+  // Composition::SetTransliterator.  The replacement must keep showing its
+  // canonical spelling instead of being rendered from its raw input
+  // ("ｇｉｔｈｕｂ").
+  composition_.SetTransliterator(0, composition_.GetLength(),
+                                 Transliterators::FULL_ASCII);
+  EXPECT_EQ(composition_.GetString(), "GitHub");
+
+  // The raw input is untouched by the mode change.
+  EXPECT_EQ(GetRawString(composition_), "github");
+}
+
 namespace {
 bool TestGetChunkAt(Composition& comp,
                     Transliterators::Transliterator transliterator,
