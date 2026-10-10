@@ -986,6 +986,180 @@ TEST_F(DictionaryPredictionAggregatorTest, TriggerConditionsLatinInputMode) {
   }
 }
 
+// While the user types Japanese in romaji on the desktop, the ASCII run that
+// was typed is also offered as an English word candidate -- but only when
+// use_auto_language_switch is on.
+TEST_F(DictionaryPredictionAggregatorTest,
+       AggregateEnglishPredictionForRomajiInputOnDesktop) {
+  std::unique_ptr<MockDataAndAggregator> data_and_aggregator =
+      CreateAggregatorWithMockData();
+  const DictionaryPredictionAggregatorTestPeer& aggregator =
+      data_and_aggregator->aggregator();
+
+  config::ConfigHandler::GetDefaultConfig(config_.get());
+  request_->Clear();
+  config_->set_use_dictionary_suggest(true);
+  config_->set_use_realtime_conversion(false);
+
+  // Only the English entries of "conv" matter here; all the other lookups come
+  // from the kana query, which this test does not model.  The second
+  // expectation is registered last so that it takes precedence over the first
+  // one for "conv".
+  MockDictionary* mock = data_and_aggregator->mutable_dictionary();
+  EXPECT_CALL(*mock, LookupPredictive(_, _, _))
+      .WillRepeatedly(InvokeCallbackWithKeyValues{});
+  EXPECT_CALL(*mock, LookupPredictive(StrEq("conv"), _, _))
+      .WillRepeatedly(InvokeCallbackWithKeyValues{{
+          {"converge", "converge"},
+          {"converged", "converged"},
+          {"convergent", "convergent"},
+      }});
+
+  // Type "conv" in romaji.  The composer stays in the Japanese input mode, so
+  // this is not a Latin input mode request.
+  table_->LoadFromFile("system://romanji-hiragana.tsv");
+  composer_->Reset();
+  composer_->SetInputMode(transliteration::HIRAGANA);
+  InsertInputSequence("conv", composer_.get());
+  ASSERT_EQ(composer_->GetRawString(), "conv");
+
+  const std::string kana_query = composer_->GetQueryForPrediction();
+
+  // The flag is off by default, so the request stays Japanese only.
+  ASSERT_FALSE(config_->use_auto_language_switch());
+  {
+    const ConversionRequest convreq = CreateSuggestionConversionRequest(
+        kana_query, /*init_composer=*/false);
+    const std::vector<Result> results =
+        aggregator.AggregateResultsForTesting(convreq);
+    EXPECT_FALSE(GetMergedTypes(results) & ENGLISH);
+  }
+
+  // With the flag on, the same request also returns the English words as
+  // ordinary prediction candidates.
+  config_->set_use_auto_language_switch(true);
+  {
+    const ConversionRequest convreq = CreateSuggestionConversionRequest(
+        kana_query, /*init_composer=*/false);
+    const std::vector<Result> results =
+        aggregator.AggregateResultsForTesting(convreq);
+    EXPECT_TRUE(GetMergedTypes(results) & ENGLISH);
+    EXPECT_TRUE(FindResultByValue(results, "converge"));
+    EXPECT_TRUE(FindResultByValue(results, "converged"));
+    EXPECT_TRUE(FindResultByValue(results, "convergent"));
+    for (const Result& result : results) {
+      // Ordinary dictionary candidates: nothing is promoted to the top, so a
+      // kana reading is never replaced by an English word.
+      EXPECT_FALSE(result.attributes & Attribute::REALTIME_TOP);
+    }
+  }
+}
+
+// The English lookup has to use the raw romaji of the composer and not the kana
+// query of the request: the entries of "conv" are unreachable through the
+// request key "con".
+TEST_F(DictionaryPredictionAggregatorTest,
+       AggregateEnglishPredictionForRomajiInputUsesRawInput) {
+  std::unique_ptr<MockDataAndAggregator> data_and_aggregator =
+      CreateAggregatorWithMockData();
+  const DictionaryPredictionAggregatorTestPeer& aggregator =
+      data_and_aggregator->aggregator();
+
+  config::ConfigHandler::GetDefaultConfig(config_.get());
+  request_->Clear();
+  config_->set_use_dictionary_suggest(true);
+  config_->set_use_realtime_conversion(false);
+  config_->set_use_auto_language_switch(true);
+
+  MockDictionary* mock = data_and_aggregator->mutable_dictionary();
+  EXPECT_CALL(*mock, LookupPredictive(_, _, _))
+      .WillRepeatedly(InvokeCallbackWithKeyValues{});
+  EXPECT_CALL(*mock, LookupPredictive(StrEq("conv"), _, _))
+      .WillRepeatedly(InvokeCallbackWithKeyValues{{
+          {"converge", "converge"},
+          {"converged", "converged"},
+          {"convergent", "convergent"},
+      }});
+  EXPECT_CALL(*mock, LookupPredictive(StrEq("con"), _, _))
+      .WillRepeatedly(InvokeCallbackWithKeyValues{{
+          {"contraction", "contraction"},
+          {"control", "control"},
+      }});
+
+  table_->LoadFromFile("system://romanji-hiragana.tsv");
+  composer_->Reset();
+  composer_->SetInputMode(transliteration::HIRAGANA);
+  InsertInputSequence("conv", composer_.get());
+  ASSERT_EQ(composer_->GetRawString(), "conv");
+
+  // The request key "con" is a different group of English entries, so only the
+  // raw input can produce the results below.
+  const ConversionRequest convreq =
+      CreateSuggestionConversionRequest("con", /*init_composer=*/false);
+  const std::vector<Result> results =
+      aggregator.AggregateResultsForTesting(convreq);
+  EXPECT_TRUE(GetMergedTypes(results) & ENGLISH);
+  EXPECT_TRUE(FindResultByValue(results, "converge"));
+  for (const Result& result : results) {
+    if (result.GetPredictionTypesForTesting() == ENGLISH) {
+      EXPECT_NE(result.value, "contraction");
+      EXPECT_NE(result.value, "control");
+    }
+  }
+}
+
+// The English candidates have to be reachable in dictionary data and not only
+// in the mock dictionary used above.  The test data manager ships the ASCII
+// entry "house", which is only reachable through the raw input lookup.
+TEST_F(DictionaryPredictionAggregatorTest,
+       AggregateEnglishPredictionWithRealDictionaryData) {
+  auto data_manager = std::make_unique<testing::MockDataManager>();
+  ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<engine::Modules> modules,
+      engine::ModulesPresetBuilder().Build(std::move(data_manager)));
+
+  MockRealtimeDecoder realtime_decoder;
+  AddDefaultImplToMockRealtimeDecoder(&realtime_decoder);
+
+  const DictionaryPredictionAggregatorTestPeer aggregator(
+      std::make_unique<DictionaryPredictionAggregator>(*modules,
+                                                       realtime_decoder));
+
+  config::ConfigHandler::GetDefaultConfig(config_.get());
+  request_->Clear();
+  config_->set_use_dictionary_suggest(true);
+  config_->set_use_realtime_conversion(false);
+
+  // Type "house" in romaji: the kana query is "ほうせ" and the raw input is
+  // "house", which is the key of the dictionary entry.
+  table_->LoadFromFile("system://romanji-hiragana.tsv");
+  composer_->Reset();
+  composer_->SetInputMode(transliteration::HIRAGANA);
+  InsertInputSequence("house", composer_.get());
+  ASSERT_EQ(composer_->GetRawString(), "house");
+
+  const std::string kana_query = composer_->GetQueryForPrediction();
+
+  config_->set_use_auto_language_switch(false);
+  {
+    const ConversionRequest convreq = CreateSuggestionConversionRequest(
+        kana_query, /*init_composer=*/false);
+    const std::vector<Result> results =
+        aggregator.AggregateResultsForTesting(convreq);
+    EXPECT_FALSE(GetMergedTypes(results) & ENGLISH);
+  }
+
+  config_->set_use_auto_language_switch(true);
+  {
+    const ConversionRequest convreq = CreateSuggestionConversionRequest(
+        kana_query, /*init_composer=*/false);
+    const std::vector<Result> results =
+        aggregator.AggregateResultsForTesting(convreq);
+    EXPECT_TRUE(GetMergedTypes(results) & ENGLISH);
+    EXPECT_TRUE(FindResultByValue(results, "house"));
+  }
+}
+
 TEST_F(DictionaryPredictionAggregatorTest, AggregateUnigramCandidate) {
   std::unique_ptr<MockDataAndAggregator> data_and_aggregator =
       CreateAggregatorWithMockData();
