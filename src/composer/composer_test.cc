@@ -1480,8 +1480,8 @@ TEST_F(ComposerTest, EnglishWordListKeepsWordsInMixedInput) {
   table_->InitializeWithRequestAndConfig(*request_, *config_);
 
   InsertRomajiKeys("githubnipushshitemoiikana", composer_.get());
-  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubにpushしてもいいかな");
-  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubにpushしてもいいかな");
+  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubにPushしてもいいかな");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubにPushしてもいいかな");
 
   composer_->Reset();
   InsertRomajiKeys("koregithub", composer_.get());
@@ -1539,12 +1539,54 @@ TEST_F(ComposerTest, EnglishWordListKeepsMixedInputWithDefaultCompositionMode) {
   table_->InitializeWithRequestAndConfig(*request_, *config_);
 
   InsertRomajiKeys("githubnipushshitemoiikana", composer_.get());
-  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubにpushしてもいいかな");
-  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubにpushしてもいいかな");
+  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubにPushしてもいいかな");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubにPushしてもいいかな");
   EXPECT_EQ(composer_->GetRawString(), "githubnipushshitemoiikana");
   // None of the AutoSwitchMode keywords matches this input, so the composition
   // is never redrawn and the canonical spelling survives.
   EXPECT_EQ(composer_->GetOutputMode(), transliteration::HIRAGANA);
+}
+
+// Every entry spells its word the way it should appear: {"pr", "PR"},
+// {"github", "GitHub"}, {"nodejs", "Node.js"}.  "push" was listed as
+// {"push", "push"}, so the reported input githubnipushsitehosiikana showed
+// "GitHubにpushしてほしいかな" instead of "GitHubにPushしてほしいかな".  The
+// word is asserted on every surface the commit uses, not only on the preedit.
+TEST_F(ComposerTest, EnglishWordListUsesConventionalCasing) {
+  config_->set_preedit_method(Config::ROMAN);
+  config_->set_use_auto_language_switch(true);
+  table_->InitializeWithRequestAndConfig(*request_, *config_);
+
+  InsertRomajiKeys("githubnipushsitehosiikana", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubにPushしてほしいかな");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubにPushしてほしいかな");
+  EXPECT_EQ(composer_->GetStringForSubmission(), "GitHubにPushしてほしいかな");
+  // The reading is derived from the keystrokes, so the replacement is
+  // reversible and the raw input is untouched.
+  EXPECT_EQ(composer_->GetRawString(), "githubnipushsitehosiikana");
+}
+
+// Every curated word must reach the commit path as half-width ASCII.  The
+// replacement is a Transliterators::CONVERSION_STRING chunk, which renders its
+// conversion verbatim, so the surfaces the commit uses -- GetStringForPreedit(),
+// GetQueryForConversion() and GetStringForSubmission() -- must all contain the
+// plain spelling and never a widened one ("ｐｕｓｈ").  "pull" is used because its
+// canonical spelling is lowercase, so this stays a pure width check.
+TEST_F(ComposerTest, EnglishWordListCommitsHalfWidthAscii) {
+  config_->set_preedit_method(Config::ROMAN);
+  config_->set_use_auto_language_switch(true);
+  table_->InitializeWithRequestAndConfig(*request_, *config_);
+
+  InsertRomajiKeys("githubnipullshitemoiikana", composer_.get());
+  EXPECT_EQ(composer_->GetStringForPreedit(), "GitHubにpullしてもいいかな");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubにpullしてもいいかな");
+  EXPECT_EQ(composer_->GetStringForSubmission(), "GitHubにpullしてもいいかな");
+
+  // The commit itself goes through the same strings for the reported input.
+  composer_->Reset();
+  InsertRomajiKeys("githubnipushsitehosiikana", composer_.get());
+  EXPECT_EQ(composer_->GetQueryForConversion(), "GitHubにPushしてほしいかな");
+  EXPECT_EQ(composer_->GetStringForSubmission(), "GitHubにPushしてほしいかな");
 }
 
 // The curated list is opt-in: with use_auto_language_switch off (the default),

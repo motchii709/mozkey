@@ -294,7 +294,7 @@ constexpr EnglishWordRule kEnglishWordRules[] = {
     {"windows", "Windows"},
     // Developer vocabulary.
     {"pr", "PR"},
-    {"push", "push"},
+    {"push", "Push"},
     {"pull", "pull"},
     {"commit", "commit"},
     {"merge", "merge"},
