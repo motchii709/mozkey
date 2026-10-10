@@ -229,6 +229,19 @@ std::vector<Result> DictionaryPredictionAggregator::AggregateResultsForDesktop(
   int min_unigram_key_len = 0;
   AggregateUnigram(request, &results, &min_unigram_key_len);
 
+  // While the user types Japanese in romaji, also offer the typed ASCII run as
+  // English word candidates.  The raw input variant is used because the request
+  // key has already been transliterated into kana, and the shared system
+  // dictionary carries the English entries under their lowercase ASCII keys.
+  // This is opt-in through use_auto_language_switch, and the results are
+  // ordinary prediction candidates: no Attribute::REALTIME_TOP is set, so a
+  // kana reading is never replaced by an English word.
+  if (request.config().use_auto_language_switch() &&
+      !request_util::IsLatinInputMode(request) &&
+      Util::CharsLen(key) >= min_unigram_key_len) {
+    AggregateEnglishUsingRawInput(request, &results);
+  }
+
   if (IsNotExceedingCutoffThreshold(request, results)) {
     AggregateNumber(request, &results);
   }
