@@ -61,6 +61,7 @@
 #include "session/key_event_transformer.h"
 #include "session/keymap.h"
 #include "session/vertical_writing_key_transform.h"
+#include "session/zenz_adoption_policy.h"
 #include "session/zenz_client_context.h"
 #include "session/zenz_client_factory.h"
 #include "session/zenz_context_assembler.h"
@@ -1765,8 +1766,31 @@ void AddOrUpdateProtectedSpan(
   protected_spans->push_back(std::move(span));
 }
 
+// Both identity-surface sites of the protected-span builder read the ASCII of a
+// visible value, and both can see the same fused romaji leftover: typing
+// "githubnipushsitehosiikana" leaves ぎてゅbにぷsh..., so "b" and "sh" are
+// identity surfaces of the preedit segment *and* of the focused converter
+// candidate even though they are letters the kana table could not consume, not a
+// surface Mozc selected.  Protecting one is actively harmful: it is one or two
+// characters, so the protected-surface gate can never repair it, and the
+// adoption policy rejects every Zenz candidate with
+// "protected_user_dictionary_surface_boundary_changed" before the orthography
+// permission is ever consulted.  Only a surface with a real protected-surface
+// boundary in the Mozc value is worth protecting.  The filter belongs to the
+// mixed-input Auto permission, so with the switch off every surface is protected
+// exactly as before.
+bool ShouldProtectAsciiIdentitySurface(absl::string_view mozc_value,
+                                       absl::string_view surface,
+                                       bool drop_fused_identity_surfaces) {
+  if (!drop_fused_identity_surfaces) {
+    return true;
+  }
+  return HasProtectedSurfaceBoundaryOccurrence(mozc_value, surface);
+}
+
 void AddPreeditIdentityProtectedSpans(
     const commands::Preedit& preedit, absl::string_view mozc_value,
+    bool drop_fused_identity_surfaces,
     std::vector<ProtectedConversionSpan>* protected_spans) {
   for (int i = 0; i < preedit.segment_size(); ++i) {
     const commands::Preedit::Segment& segment = preedit.segment(i);
@@ -1779,6 +1803,11 @@ void AddPreeditIdentityProtectedSpans(
     const std::vector<std::string> identity_surfaces =
         ExtractAsciiIdentitySurfaces(segment.value());
     for (const std::string& surface : identity_surfaces) {
+      if (!ShouldProtectAsciiIdentitySurface(mozc_value, surface,
+                                             drop_fused_identity_surfaces)) {
+        continue;
+      }
+
       const std::string surface_key = InferProtectedKeyForEmbeddedSurface(
           segment_key, segment.value(), surface);
       const ProtectedConversionSpan::Tier tier =
@@ -1860,7 +1889,7 @@ void AddDirectUserDictionaryEntryProtectedSpans(
 std::vector<ProtectedConversionSpan> BuildZenzProtectedConversionSpans(
     const engine::EngineConverterInterface& converter,
     const commands::Output& output, absl::string_view live_key,
-    absl::string_view mozc_value) {
+    absl::string_view mozc_value, bool drop_fused_identity_surfaces) {
   std::vector<ProtectedConversionSpan> protected_spans;
 
   if (output.has_all_candidate_words()) {
@@ -1911,6 +1940,11 @@ std::vector<ProtectedConversionSpan> BuildZenzProtectedConversionSpans(
           ExtractAsciiIdentitySurfaces(candidate.value());
       if (!identity_surfaces.empty()) {
         for (const std::string& surface : identity_surfaces) {
+          if (!ShouldProtectAsciiIdentitySurface(
+                  mozc_value, surface, drop_fused_identity_surfaces)) {
+            continue;
+          }
+
           const std::string surface_key = InferProtectedKeyForEmbeddedSurface(
               protected_key, candidate.value(), surface);
           const ProtectedConversionSpan::Tier tier =
@@ -1933,6 +1967,7 @@ std::vector<ProtectedConversionSpan> BuildZenzProtectedConversionSpans(
 
   if (output.has_preedit()) {
     AddPreeditIdentityProtectedSpans(output.preedit(), mozc_value,
+                                     drop_fused_identity_surfaces,
                                      &protected_spans);
   }
 
@@ -4792,9 +4827,12 @@ bool Session::MaybeStartLiveConversionInternal(
   pending_live_conversion_presentation_.reset();
   live_conversion_protected_spans_.clear();
   if (context_->GetConfig().use_zenz_live_correction()) {
+    // The fused-leftover filter is part of the mixed English/Japanese ("Auto")
+    // permission: with the switch off the span list stays exactly as it was.
     live_conversion_protected_spans_ = BuildZenzProtectedConversionSpans(
         context_->converter(), command->output(), live_conversion_key_,
-        live_conversion_value_);
+        live_conversion_value_,
+        context_->GetConfig().use_auto_language_switch());
   }
 
   ClearZenzLiveCorrectionState();

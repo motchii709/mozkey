@@ -52,10 +52,16 @@ struct ZenzOrthographyDecision {
 // One additive, opt-in exception exists for mixed English/Japanese input.
 // `allow_script_transition` mirrors config::Config::use_auto_language_switch
 // (the user-visible "Auto" switch, default false).  When it is true, a Mozc
-// surface that contains no ASCII letter at all (pure kana) may become ASCII
-// letters, but only when every ASCII surface the candidate introduces was
-// literally typed by the user as raw romaji, supplied in `typed_raw_input`
-// (composer::Composer::GetRawString()).  Matching is case-insensitive and
+// surface that carries no boundary-complete ASCII surface of its own may become
+// ASCII letters: a pure-kana segment, or one whose only ASCII runs are romaji
+// leftovers the kana table could not consume and the composer therefore left
+// fused to the kana around them (typing "githubnipush..." leaves ぎてゅbにぷsh
+// with "b" and "sh" glued to kana).  A fused run is not a surface Mozc selected,
+// so it neither closes this permission nor counts as one of the surfaces the
+// candidate must preserve.  The letters may change only when every ASCII surface
+// the candidate introduces was literally typed by the user as raw romaji,
+// supplied in `typed_raw_input` (composer::Composer::GetRawString()).  Matching
+// is case-insensitive and
 // accepts a contiguous substring ("github" typed as raw romaji licenses the
 // candidate run "GitHub") or a consonant-skeleton subsequence of the typed
 // romaji: vowels are dropped on both sides and the remaining consonants must

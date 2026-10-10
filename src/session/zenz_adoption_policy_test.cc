@@ -706,5 +706,77 @@ TEST(ZenzAdoptionPolicyTest,
             "orthographic_transition_missing_baseline_segments");
 }
 
+TEST(ZenzAdoptionPolicyTest,
+     FusedRomanizationLeftoverIsNotABoundaryProtectedSurface) {
+  // The gate session.cc (AddPreeditIdentityProtectedSpans) consults before it
+  // turns a preedit ASCII identity surface into a protected span.  The letters
+  // the kana table cannot consume stay in the composition fused to the kana
+  // around them -- ぎてゅbにぷsh -- so they must not be protected as surfaces.
+  EXPECT_FALSE(HasProtectedSurfaceBoundaryOccurrence("ぎてゅbにぷsh", "b"));
+  EXPECT_FALSE(HasProtectedSurfaceBoundaryOccurrence("ぎてゅbにぷsh", "sh"));
+  // A fragment glued to kanji is the same class of leftover: it is not a
+  // boundary-complete surface on its own.
+  EXPECT_FALSE(HasProtectedSurfaceBoundaryOccurrence("v3.2版を使う", "v3.2"));
+
+  // Surfaces Mozc actually selected do have a boundary: a particle, punctuation,
+  // a space, or an end of the value.
+  EXPECT_TRUE(
+      HasProtectedSurfaceBoundaryOccurrence("GitHubを使う", "GitHub"));
+  EXPECT_TRUE(
+      HasProtectedSurfaceBoundaryOccurrence("Mozkeyを使っています", "Mozkey"));
+  EXPECT_TRUE(
+      HasProtectedSurfaceBoundaryOccurrence("v3.2版を使う", "v3.2版"));
+  EXPECT_TRUE(HasProtectedSurfaceBoundaryOccurrence("v3.2", "v3.2"));
+}
+
+TEST(ZenzAdoptionPolicyTest, DropsFusedLeftoverSpansBeforeDeciding) {
+  ZenzAdoptionPolicy policy;
+  const std::string mozc_value = "ぎてゅbにぷshしてほしいかな";
+
+  ZenzAdoptionInput input;
+  input.key = "ぎてゅbにぷshしてほしいかな";
+  input.mozc_value = mozc_value;
+  input.zenz_value = "GitHubにPushしてほしいかな";
+  input.baseline_segments = {{"ぎてゅb", "ぎてゅb"},
+                             {"に", "に"},
+                             {"ぷsh", "ぷsh"},
+                             {"してほしいかな", "してほしいかな"}};
+  input.allow_script_transition = true;
+  input.typed_raw_input = "githubnipushsitehosiikana";
+
+  // Why the session has to drop these spans: "b" and "sh" are one and two
+  // characters long, so the protected-surface gate can never repair them, and
+  // the candidate is rejected with
+  // "protected_user_dictionary_surface_boundary_changed" although it keeps every
+  // letter the user typed.
+  const std::vector<ProtectedConversionSpan> leftover_spans = {
+      BuildSpan("", "b", ProtectedConversionSpan::Tier::kIdentityCritical,
+                false),
+      BuildSpan("", "sh", ProtectedConversionSpan::Tier::kIdentityCritical,
+                false),
+  };
+  input.protected_spans = leftover_spans;
+  const ZenzAdoptionResult rejected = policy.Decide(input);
+  EXPECT_EQ(rejected.reason,
+            "protected_user_dictionary_surface_boundary_changed");
+  EXPECT_EQ(rejected.action, ZenzAdoptionResult::Action::kReject);
+  EXPECT_EQ(rejected.value, mozc_value);
+
+  // After the session keeps only boundary-complete surfaces, the very same
+  // candidate is adopted with the English surface.
+  input.protected_spans.clear();
+  for (const ProtectedConversionSpan& span : leftover_spans) {
+    if (HasProtectedSurfaceBoundaryOccurrence(mozc_value, span.value)) {
+      input.protected_spans.push_back(span);
+    }
+  }
+  EXPECT_TRUE(input.protected_spans.empty());
+
+  const ZenzAdoptionResult adopted = policy.Decide(input);
+  EXPECT_EQ(adopted.reason, "accepted");
+  EXPECT_EQ(adopted.value, "GitHubにPushしてほしいかな");
+  EXPECT_EQ(adopted.action, ZenzAdoptionResult::Action::kAcceptAsIs);
+}
+
 }  // namespace
 }  // namespace mozc::session
