@@ -24,6 +24,7 @@ Current external sources used by the daily workflow:
 | `merge-ut-dictionaries` | merge-ut daily profile | Upstream generated dictionary is described as `Combined`. Check the upstream LICENSE and source-specific license notes before redistribution. |
 | `dic-nico-intersection-pixiv` | nico/pixiv delta dictionary | Upstream states that the code is MIT licensed and that the generated dictionary data is published with no copyright claim by the upstream author. Treat redistribution as review-required because the data is derived from external web sources. |
 | `mozcdic-ut-personal-names` | personal names dictionary | Upstream is Apache License, Version 2.0. Check upstream attribution and NOTICE requirements before redistribution. |
+| `dwyl/english-words` | curated English word list (`src/data/dictionary_manual/english_words.tsv`) | Upstream `LICENSE.md` is the verbatim Unlicense public-domain dedication. Source file `words_alpha.txt` (<https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt>, sha256 `3ed0c94610d8bcf7c11bbb49c56aa49c7234d32b66824df91f554169e572da48`, retrieved 2026-10-10 UTC). Upstream `word_list_moby_credits.txt` records that the list is the Moby Word Lists by Grady Ward, Project Gutenberg eBook 3201, "Public domain in the USA"; upstream `README.md` also points at an infochimps "simple english words" dataset. The generated TSV is committed; regenerate it with `python tools/dictionary/generate_english_words.py`. |
 
 Repository policy:
 
