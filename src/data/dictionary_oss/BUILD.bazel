@@ -85,6 +85,30 @@ filegroup(
     ],
 )
 
+# English words that become prediction candidates while the user types Japanese
+# in romaji (gated by config.use_auto_language_switch in
+# //prediction:dictionary_prediction_aggregator).
+#
+# Format: key <tab> lid <tab> rid <tab> cost <tab> value <tab> ENGLISH
+#   * TextDictionaryLoader::ParseTSV requires five columns and accepts the
+#     optional sixth label.  "ENGLISH" rewrites lid/rid to the isolated word
+#     POS (特殊,短縮よみ, see //data/rules:special_pos.def); columns 2 and 3
+#     only have to be integers, so 0 is fine and only the cost is meaningful.
+#   * cost 8000 matches the ASCII entries already shipped in domain.txt and in
+#     the test dictionary.  On top of that, the isolated word POS costs 30000
+#     per transition, so these candidates sort below ordinary kana predictions
+#     and Attribute::REALTIME_TOP is never set: an English word can never take
+#     a kana reading away from the user.
+#   * keys are lowercase ASCII letters, unique and sorted; the loader does not
+#     understand comments or blank lines, so the file must contain neither.
+#     A key is left out when its romaji reading is a word of the Japanese
+#     dictionary, i.e. when typing it already produces usable kana -- the same
+#     rule src/composer/composer.cc documents for its curated word list.
+filegroup(
+    name = "english_words_data",
+    srcs = ["english_words.txt"],
+)
+
 genrule(
     name = "aux_dictionary",
     srcs = [
