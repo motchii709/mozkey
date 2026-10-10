@@ -34,7 +34,7 @@ kana-keyed TSVs above.
 The file is generated, not hand-edited:
 
 ```powershell
-python tools/dictionary/generate_english_words.py
+python tools/dictionary/generate_english_words.py --romaji-filter none --max-len 6
 ```
 
 *   Source: [dwyl/english-words](https://github.com/dwyl/english-words),
@@ -43,19 +43,22 @@ python tools/dictionary/generate_english_words.py
     the USA. See the external source table in
     `src/data/dictionary_koyasi/README.md` for the URL, checksum and retrieval
     date.
-*   A word is dropped when the romaji table in
-    `src/data/preedit/romanji-hiragana.tsv` can consume its spelling completely,
-    because such a word would take a Japanese reading away from the user. The
-    deny list documented in `src/composer/composer.cc` (`mac`, `ci`, `youtube`)
-    is dropped as well. Every dropped word is listed in
-    `dist/dictionary/english_words-dropped.txt`.
-*   The size bound is a length window, 3 to 5 letters by default, which keeps
-    the list near 20,000 entries. Both bounds are parameters of the script.
+*   These entries are meant to be consumed as *prediction candidates*, not as an
+    automatic replacement: an English candidate is offered next to the kana
+    conversion, so the kana reading stays available and a spelling that the
+    romaji table can also consume (`code` -> こで) may be kept. The deny list
+    documented in `src/composer/composer.cc` (`mac`, `ci`, `youtube`) is still
+    dropped, because those spellings are far more likely to be meant as
+    Japanese. `--romaji-filter full` restores the strict collision filter, and
+    every dropped word is listed in `dist/dictionary/english_words-dropped.txt`.
+*   The size bound is a length window, 3 to 6 letters by default, which keeps
+    the list near 55,000 entries. Both bounds are parameters of the script.
 *   The brand and technical names that need canonical casing (`GitHub`,
     `Node.js`, `PostgreSQL`, ...) are a separate hand-curated list in the
     script. They win over the generated words with the same key.
-*   `python tools/dictionary/generate_english_words.py --check` fails when the
-    committed file is not what the script produces.
+*   `python tools/dictionary/generate_english_words.py --check --romaji-filter
+    none --max-len 6` fails when the committed file is not what the script
+    produces.
 
 ## domain.txt
 
