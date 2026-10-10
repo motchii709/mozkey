@@ -258,6 +258,22 @@ std::string ZenzContextSelector::SelectLeft(
   const size_t selected_chars =
       codepoints.size() - selected_start;
 
+  // A caret at the start of a paragraph introduced by a blank line leaves an
+  // empty paragraph prefix. Returning nothing there starves Zenz of left
+  // context, so fall back to the raw trailing budget instead.
+  if (selected_chars == 0) {
+    const size_t fallback_chars =
+        std::min(max_chars, codepoints.size());
+    const size_t fallback_start =
+        codepoints.size() - fallback_chars;
+
+    return std::string(
+        Util::Utf8SubString(
+            text,
+            fallback_start,
+            fallback_chars));
+  }
+
   return std::string(
       Util::Utf8SubString(
           text,
