@@ -116,6 +116,20 @@ TEST(ZenzContextSelectorTest,
 }
 
 TEST(ZenzContextSelectorTest,
+     LeftAtBlankLineParagraphStartUsesRawTrailingBudget) {
+  const ZenzContextSelector selector;
+
+  // The caret sits at the start of a paragraph introduced by a blank line, so
+  // the current-paragraph prefix is empty. Returning "" here starves Zenz of
+  // left context entirely, so the raw trailing budget is used instead.
+  EXPECT_EQ(
+      selector.SelectLeft(
+          "前の段落\n\n",
+          128),
+      "前の段落\n\n");
+}
+
+TEST(ZenzContextSelectorTest,
      RightStopsAfterJapaneseSentenceTerminator) {
   const ZenzContextSelector selector;
 
