@@ -112,6 +112,132 @@ std::vector<std::string> ExtractAlphabetRuns(absl::string_view value) {
   return runs;
 }
 
+// The baseline filter below needs the "is this ASCII fused to its
+// surroundings?" test that the adoption policy uses to tell a Mozc-selected
+// ASCII surface apart from a fragment glued to kana.  This is the lower layer
+// (session/zenz_adoption_policy.h depends on this header), so the predicate is
+// repeated here instead of shared; keep it in step with
+// session/zenz_adoption_policy.cc's IsJapaneseLetterLike /
+// IsProtectedSurfaceBoundaryChar.
+bool IsAsciiWordLikeCodepoint(char32_t c) {
+  return (U'0' <= c && c <= U'9') || (U'A' <= c && c <= U'Z') ||
+         (U'a' <= c && c <= U'z') || c == U'_' || c == U'-' || c == U'.' ||
+         c == U'+' || c == U'#';
+}
+
+bool IsJapaneseLetterLikeCodepoint(char32_t c) {
+  return (0x3040 <= c && c <= 0x309F) ||  // Hiragana
+         (0x30A0 <= c && c <= 0x30FF) ||  // Katakana
+         (0x3400 <= c && c <= 0x9FFF) ||  // CJK Unified Ideographs
+         (0xF900 <= c && c <= 0xFAFF) ||  // CJK Compatibility Ideographs
+         (0xFF66 <= c && c <= 0xFF9D);    // Halfwidth Katakana
+}
+
+bool IsJapaneseParticleBoundaryCodepoint(char32_t c) {
+  switch (c) {
+    case U'の':
+    case U'は':
+    case U'を':
+    case U'に':
+    case U'で':
+    case U'へ':
+    case U'と':
+    case U'が':
+    case U'も':
+    case U'や':
+    case U'か':
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool IsPunctuationOrSpaceBoundaryCodepoint(char32_t c) {
+  if (c <= 0x20) {
+    return true;
+  }
+  switch (c) {
+    case U'、':
+    case U'。':
+    case U'，':
+    case U'．':
+    case U'・':
+    case U'「':
+    case U'」':
+    case U'『':
+    case U'』':
+    case U'（':
+    case U'）':
+    case U'(':
+    case U')':
+    case U'[':
+    case U']':
+    case U'{':
+    case U'}':
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool IsProtectedSurfaceBoundaryCodepoint(char32_t c) {
+  if (IsPunctuationOrSpaceBoundaryCodepoint(c) ||
+      IsJapaneseParticleBoundaryCodepoint(c)) {
+    return true;
+  }
+  return !IsJapaneseLetterLikeCodepoint(c) && !IsAsciiWordLikeCodepoint(c);
+}
+
+// The ALPHABET runs of `value` that are boundary-complete: every run whose
+// neighbours in `value` are Japanese particles, punctuation, spaces, or an end
+// of the string.  A run with a non-particle Japanese letter or an ASCII word
+// character beside it was fused to its surroundings by the composer, which is
+// exactly what a romanisation leftover looks like: the kana table cannot consume
+// a consonant such as the "b" of "github" or the "sh" of "push", so it stays
+// inside ぎてゅbにぷsh as literal half-width ASCII and shows up in the Mozc
+// value -- but it was never an ASCII surface Mozc selected.  The candidate side
+// keeps using every run, because a candidate surface is judged by where its
+// letters came from, not by what surrounds them.
+std::vector<std::string> ExtractBoundaryCompleteAlphabetRuns(
+    absl::string_view value) {
+  std::vector<std::string> runs;
+  std::string current;
+  bool pending = false;
+  bool left_is_boundary = true;
+  char32_t previous = 0;
+  bool has_previous = false;
+
+  const auto flush = [&](char32_t right, bool has_right) {
+    if (!pending) {
+      return;
+    }
+    if (left_is_boundary &&
+        (!has_right || IsProtectedSurfaceBoundaryCodepoint(right))) {
+      runs.push_back(current);
+    }
+    current.clear();
+    pending = false;
+  };
+
+  for (ConstChar32Iterator iter(value); !iter.Done(); iter.Next()) {
+    const char32_t codepoint = iter.Get();
+    if (Util::GetScriptType(codepoint) == Util::ALPHABET) {
+      if (!pending) {
+        pending = true;
+        left_is_boundary =
+            !has_previous || IsProtectedSurfaceBoundaryCodepoint(previous);
+      }
+      Util::CodepointToUtf8Append(codepoint, &current);
+    } else {
+      flush(codepoint, /*has_right=*/true);
+    }
+    previous = codepoint;
+    has_previous = true;
+  }
+  flush(0, /*has_right=*/false);
+  return runs;
+}
+
 bool StringMultisetsMatch(const std::vector<std::string>& baseline_values,
                           const std::vector<std::string>& candidate_values) {
   if (baseline_values.size() != candidate_values.size()) {
@@ -256,16 +382,28 @@ ZenzOrthographyDecision ZenzOrthographyPolicy::Evaluate(
 
   const std::vector<std::string> candidate_runs =
       ExtractAlphabetRuns(candidate_value);
-  const std::vector<std::string> baseline_runs = ExtractAlphabetRuns(mozc_value);
+  // Baseline alphabet runs that normal Mozc already selected.  Under the
+  // mixed-input permission only boundary-complete runs count as surfaces: a run
+  // the composer fused to the kana beside it (or to a neighbouring ASCII word
+  // character) is a romanisation leftover, and counting it closed the whole
+  // permission for compositions such as ぎてゅbにぷsh..., so the model's
+  // GitHubにPush... was refused with "alphabetic_surface_changed".  A
+  // boundary-complete run is a real surface and still blocks.  With the flag off
+  // the unfiltered list is used verbatim, so the historical path is
+  // byte-identical.
+  const std::vector<std::string> baseline_runs =
+      allow_script_transition ? ExtractBoundaryCompleteAlphabetRuns(mozc_value)
+                              : ExtractAlphabetRuns(mozc_value);
 
   // The mixed-input permission is deliberately narrow.  It applies only when
-  // the Mozc surface carries no ASCII letter at all, so it can never remove,
-  // mutate, or duplicate a surface that normal Mozc already selected; it only
-  // lets a pure-kana segment surface letters the user actually typed.  An
-  // empty baseline run list also implies an empty baseline technical-token
-  // list, because every technical token contains an ASCII letter, which is
-  // itself an ALPHABET run.  An empty raw string fails closed.  With the flag
-  // false this is all inert and behaviour is byte-identical to before.
+  // the Mozc surface carries no ASCII surface of its own, so it can never
+  // remove, mutate, or duplicate a surface that normal Mozc already selected;
+  // it only lets a kana segment surface letters the user actually typed.  An
+  // empty raw string fails closed.  The baseline technical-token list below is
+  // deliberately not filtered the same way (a fused leftover is a technical
+  // token too); the token check can still only accept candidate tokens that the
+  // typed romaji grounds.  With the flag false this is all inert and behaviour
+  // is byte-identical to before.
   const bool script_transition_allowed =
       allow_script_transition && baseline_runs.empty() &&
       !typed_raw_input.empty();

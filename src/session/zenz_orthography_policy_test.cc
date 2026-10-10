@@ -318,5 +318,43 @@ TEST(ZenzOrthographyPolicyTest, AcceptsTheHeadlinePhoneticRespelling) {
                   .allow);
 }
 
+TEST(ZenzOrthographyPolicyTest,
+     AdmitsEnglishSurfaceOverAFusedRomanizationLeftover) {
+  ZenzOrthographyPolicy policy;
+
+  // The reported composition: typing "githubnipushsitehosiikana" leaves the
+  // consonants the kana table cannot read in the composition as literal
+  // half-width ASCII, so the Mozc baseline is ぎてゅbにぷshしてほしいかな and
+  // carries "b" and "sh" as ALPHABET runs that are fused to the kana around
+  // them.  No ASCII surface Mozc actually selected looks like that, so a fused
+  // run must not close the mixed-input permission; otherwise the model's
+  // "GitHubにPushしてほしいかな" is refused with "alphabetic_surface_changed"
+  // even though the user typed every letter of every surface.
+  const ZenzOrthographyDecision decision = policy.Evaluate(
+      "ぎてゅbにぷshしてほしいかな", "GitHubにPushしてほしいかな",
+      /*allow_script_transition=*/true, "githubnipushsitehosiikana");
+  // The reason is asserted first so a failure reports the rejection.
+  EXPECT_EQ(decision.reason, "accepted");
+  EXPECT_TRUE(decision.allow);
+
+  // Control: "GitHub" in "GitHubを使う" is a boundary-complete surface (を is a
+  // particle), so it stays a Mozc-selected ASCII surface and its removal is
+  // still refused even though the user typed exactly those letters.
+  const ZenzOrthographyDecision control = policy.Evaluate(
+      "GitHubを使う", "ギットハブを使う",
+      /*allow_script_transition=*/true, "github");
+  EXPECT_EQ(control.reason, "alphabetic_surface_changed");
+  EXPECT_FALSE(control.allow);
+
+  // With the switch off the fused leftover keeps its historical effect: the
+  // permission never opens and the same transition stays rejected.
+  EXPECT_FALSE(policy
+                   .Evaluate("ぎてゅbにぷshしてほしいかな",
+                             "GitHubにPushしてほしいかな",
+                             /*allow_script_transition=*/false,
+                             "githubnipushsitehosiikana")
+                   .allow);
+}
+
 }  // namespace
 }  // namespace mozc::session

@@ -605,6 +605,11 @@ bool BaselineSegmentsMatchAdoptionInput(
 
 }  // namespace
 
+bool HasProtectedSurfaceBoundaryOccurrence(absl::string_view value,
+                                           absl::string_view surface) {
+  return CountBoundaryPreservedOccurrences(value, surface) > 0;
+}
+
 ProtectedConversionSpan::Tier ClassifyProtectedAsciiSurface(
     absl::string_view surface) {
   if (surface.empty()) {

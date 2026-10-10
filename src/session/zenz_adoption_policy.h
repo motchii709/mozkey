@@ -87,6 +87,19 @@ struct ProtectedConversionSpan {
 ProtectedConversionSpan::Tier ClassifyProtectedAsciiSurface(
     absl::string_view surface);
 
+// True when `surface` occurs in `value` at least once with a protected-surface
+// boundary on both sides: its neighbours are Japanese particles, punctuation,
+// spaces, or an end of the string.  A surface that only ever occurs glued to a
+// non-particle Japanese letter or to an ASCII word character was fused to its
+// surroundings -- for example the "b" of the romaji leftover inside ぎてゅbに --
+// and is not a user-visible ASCII surface Mozc selected.  The session consults
+// this before it protects the ASCII identity surface of a preedit segment: such
+// a leftover is one or two characters, so the protected-surface gate can never
+// repair it and every Zenz candidate is rejected with
+// "protected_user_dictionary_surface_boundary_changed".
+bool HasProtectedSurfaceBoundaryOccurrence(absl::string_view value,
+                                           absl::string_view surface);
+
 struct ZenzProtectedPromptInput {
   absl::string_view key;
   std::vector<ProtectedConversionSpan> protected_spans;
